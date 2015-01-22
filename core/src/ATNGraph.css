@@ -1,0 +1,46 @@
+body{
+	height: 100%;
+	margin:0;
+	padding:16px;
+	background: #f0f0f0;
+}
+
+svg{
+	overflow: auto;
+	width:100%;
+	/* background: #e0e0e0; */
+	height: 3000px;
+}
+
+svg text {
+	stroke:#202070;
+	text-anchor:middle;
+	font-size: 12px;
+}
+text.tran{
+	stroke: #194646;
+}
+
+svg text.type{
+	stroke:#604b8a;
+}
+
+svg .drawed{
+	fill:#2daebb;
+	stroke-width: 0;
+}
+
+circle{
+	fill: transparent;
+}
+circle.decision-state{
+	stroke: blue;
+}
+
+svg .transition{
+	stroke: #202020;
+	stroke-width: 1px;
+	fill:transparent;
+}
+stop.end { stop-color:green; }
+
