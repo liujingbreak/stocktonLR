@@ -3,12 +3,12 @@ var stGrammarParser = require('../src/stockton-grammar-parser.js'),
 	sc = require('../src/stocktonCompiler'),
 	debugATN = require('../src/debugATN.js'),
 	Compiler = sc.Compiler,
-	srt = require('../src/stocktonRuntime.js'),
+	stRuntime = require('../src/stocktonRuntime.js'),
 	cycle = require('cycle'),
 	util = require('util'),
 	fs = require('fs'),
 	path = require('path'),
-	PredictionContext  = srt.PredictionContext;
+	PredictionContext  = stRuntime.PredictionContext;
 
 describe('Compiler', function(){
 	it('getStringFromGrammarStringLiteral() should work', function(){
@@ -48,6 +48,12 @@ describe('stockton grammar parser', function(){
 		var graphPath = path.join(__dirname, '../build/ATNGraph.html');
 		debugATN.debugATN(atn, graphPath);
 	});
+	
+	it('compiler can generate Lexer parser based on ATN', function(){
+		var compiler = new Compiler();
+		var atn0 = compiler.compile(this.str);
+		//var scanToken = stRuntime.generateLexer(atn);
+	})
 });
 
 
