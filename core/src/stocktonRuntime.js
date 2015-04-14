@@ -1,4 +1,9 @@
 var _ = require("lodash");
+var util = require('util');
+var LL = require('./baseLLParser');
+var 	Log4js = require('log4js');
+
+var logger = Log4js.getLogger('stocktonRuntime');
 var debug = true;
 function PredictionContext(cachedHashCode){
 	this.cachedHashCode = cachedHashCode;
@@ -242,9 +247,13 @@ ATNConfigSet.prototype = {
 			return this.cachedHashCode;
 		}
 		return this.configs.join();
+	},
+	isEmpty: function(){
+		return this.configs.length === 0;
 	}
 };
 
+//@finished
 function OrderedATNConfigSet(){
 	ATNConfigSet.call(this);
 	this.configLookup = {};
@@ -260,49 +269,75 @@ ATNSimulator.ERROR = new DFAState(new ATNConfigSet());
 ATNSimulator.ERROR.stateNumber = Number.MAX_VALUE;
 
 ATNSimulator.prototype ={
-	
+	ERROR: ATNSimulator.ERROR
 };
 
+function SimState(){
+	this.reset();
+}
+SimState.prototype ={
+	reset:function(){
+		this.index = -1;
+		this.line = 0;
+		this.charPos = -1;
+		this.dfaState = null;
+	}
+};
 
 function LexerATNSimulator(atn, decisionToDFA, sharedContextCache){
 	ATNSimulator.call(this, atn, sharedContextCache);
+	this.recog = null;
 	this.mode = 0;//todo
 	this.decisionToDFA = decisionToDFA;
+	this.startIndex = -1;
+	this.line = 1;
+	this.charPositionInLine = 0;
+	this.match_calls = 0;
+	this.prevAccept = new SimState();
 }
 
 LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		
 	MIN_DFA_EDGE: 0,
 	MAX_DFA_EDGE: 127,
+	logger: Log4js.getLogger('LexerATNSimulator'),
 	
 	match:function(input, mode){
 		this.mode = mode;
-		var dfa = this.decisionToDFA[mode];
-		if ( dfa.s0==null ) {
-			return this.matchATN(input);
-		}
-		else {
-			return this.execATN(input, dfa.s0);
+		this.match_calls++;
+		try{
+			this.startIndex = input.offset;
+			this.prevAccept.reset();
+			var dfa = this.decisionToDFA[mode];
+			if ( dfa.s0==null ) {
+				return this.matchATN(input);
+			}
+			else {
+				return this.execATN(input, dfa.s0);
+			}
+		}finally{
+			// todo input.release(mark);
 		}
 	},
 	
 	matchATN:function(input){
 		var startState = this.atn.states[this.mode];
 		if ( debug ) {
-			console.log("matchATN() mode %d start: %s\n", this.mode, startState);
+			this.logger.debug("matchATN() mode %d start: %s\n", this.mode, startState);
 		}
 		var old_mode = this.mode;
 		var s0_closure = this.computeStartState(input, startState);
 		var suppressEdge = s0_closure.hasSemanticContext;
+		s0_closure.hasSemanticContext = false;
 		var next = this.addDFAState(s0_closure);
 		if (!suppressEdge) {
 			this.decisionToDFA[this.mode].s0 = next;
-		}debugger;
-		console.log('suppressEdge: %j, s0 = %s\ns0_closure = %s', suppressEdge, next+'', s0_closure.toString());
+		}
+		this.logger.debug('suppressEdge: %j, s0 = %s\ns0_closure = %s', suppressEdge, next+'', s0_closure.toString());
 		var predict = this.execATN(input, next);
 
 		if ( debug ) {
-			console.log( "matchATN() DFA after matchATN: %s\n", this.decisionToDFA[old_mode]);
+			this.logger.debug( "matchATN() DFA after matchATN: %s\n", this.decisionToDFA[old_mode]);
 		}
 
 		return predict;
@@ -310,20 +345,54 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 	
 	execATN: function(input, ds0){
 		if ( debug ) {
-			console.log("execATN() start state closure=%s\n", ds0.configs);
+			this.logger.debug("execATN() start state closure=%s\n", ds0.configs);
 		}
 		var t = input.la(1);
 		var s = ds0; // s is current/from DFA state
 		while ( true ) { // while more work
 			if ( debug ) {
-				console.log("execATN() execATN loop starting closure: %s\n", s.configs);
+				this.logger.debug("execATN() execATN loop starting closure: %s\n", s.configs);
 			}
 			var target = this.getExistingTargetState(s, t);
 			if (target == null) {
 				target = this.computeTargetState(input, s, t);
 			}
+			
+			if (target == this.ERROR) {
+				break;
+			}
+			
+			if (target.isAcceptState) {
+				/** todo */this.captureSimState(this.prevAccept, input, target);
+				if (t == LL.Lexer.prototype.EOF) {
+					break;
+				}
+			}
+
+			if (t != LL.Lexer.prototype.EOF) {
+				/** todo */this.consume(input);
+				t = input.la(1);
+			}
+			s = target;
 		}
-		return 0;
+		return this.failOrAccept(this.prevAccept, input, s.configs, t);
+	},
+	
+	failOrAccept: function(prevAccept, input, reach, t){
+		if (prevAccept.dfaState != null) {
+			var lexerActionExecutor = prevAccept.dfaState.lexerActionExecutor;
+			/* todo */this.accept(input, lexerActionExecutor, this.startIndex,
+				prevAccept.index, prevAccept.line, prevAccept.charPos);
+			return prevAccept.dfaState.prediction;
+		}
+		else {
+			// if no accept and EOF is first char, return EOF
+			if ( t==LL.Lexer.prototype.EOF && input.offset == startIndex ) {
+				return LL.Lexer.prototype.EOF;
+			}
+
+			throw _LexerNoViableAltException(this.recog, input, this.startIndex, reach);
+		}
 	},
 	
 	getExistingTargetState:function(s, t){
@@ -333,7 +402,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 
 		var target = s.edges[t - this.MIN_DFA_EDGE];
 		if (debug && target != null) {
-			console.log("getExistingTargetState() "+s.stateNumber+
+			this.logger.debug("getExistingTargetState() "+s.stateNumber+
 							   " edge to "+target.stateNumber);
 		}
 
@@ -368,15 +437,71 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 			if (!reach.hasSemanticContext) {
 				// we got nowhere on t, don't throw out this knowledge; it'd
 				// cause a failover from DFA later.
-				this.addDFAEdge(s, t, ERROR);
+				this.addDFAEdge(s, t, this.ERROR);
 			}
 
 			// stop when we can't match any more char
-			return ERROR;
+			return this.ERROR;
 		}
 
 		// Add an edge from s to target DFA found/created for reach
 		return this.addDFAEdge(s, t, reach);
+	},
+	
+	// there is another overwriten addDFAEdge()
+	addDFAEdge: function(p, t, q){
+		if(q instanceof ATNConfigSet){
+			var suppressEdge = q.hasSemanticContext;
+			q.hasSemanticContext = false;
+			var to = this._addDFAState(q);
+			return to;
+		}
+		if (t < this.MIN_DFA_EDGE || t > this.MAX_DFA_EDGE) {
+			// Only track edges within the DFA bounds
+			return;
+		}
+		if ( debug ) {
+			this.logger.debug("EDGE "+p+" -> "+q+" upon "+ t );
+		}
+		if ( p.edges==null ) {
+			//  make room for tokens 1..n and -1 masquerading as index 0
+			p.edges = new Array(this.MAX_DFA_EDGE - this.MIN_DFA_EDGE +1);
+		}
+		p.edges[t - this.MIN_DFA_EDGE] = q; // connect
+	},
+	
+	_addDFAState:function(configs){
+		if(configs.hasSemanticContext)
+			throw new Error('failed to assert !configs.hasSemanticContext');
+		var proposed = new DFAState(configs);
+		var firstConfigWithRuleStopState = null;
+		configs.some(function(c){
+			if ( c.state.type === 'ruleStop' )	{
+				firstConfigWithRuleStopState = c;
+				return true;
+			}
+			return false;
+		});
+
+		if ( firstConfigWithRuleStopState!=null ) {
+			proposed.isAcceptState = true;
+			proposed.lexerActionExecutor = firstConfigWithRuleStopState.lexerActionExecutor;
+			proposed.prediction = this.atn.ruleToTokenType[firstConfigWithRuleStopState.state.ruleName];
+		}
+
+		var dfa = this.decisionToDFA[this.mode];
+		//synchronized (dfa.states) {
+			existing = dfa.states[proposed.toString()];
+			if ( existing!=null ) return existing;
+
+			var newState = proposed;
+
+			newState.stateNumber = _.size(dfa.states);
+			configs.setReadonly(true);
+			newState.configs = configs;
+			dfa.states[newState.toString()] = newState;
+			return newState;
+		//}
 	},
 	
 	getReachableConfigSet:function(input, closure, reach, t){
@@ -387,15 +512,25 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 				return;
 			}
 			if(debug)
-				console.log('getReachableConfigSet() testing %s at %s\n', t, c.toString());
+				this.logger.debug('getReachableConfigSet() testing %s at %s\n', t, c.toString());
 			var n = c.state.transitions.length;
 			for (var ti=0; ti<n; ti++) {
 				var trans = c.state.transitions[ti];
 				var target = this.getReachableTarget(trans, t);
-				//todo
+				if ( target!=null ) {
+					var lexerActionExecutor = c.lexerActionExecutor;
+					if (lexerActionExecutor != null) {
+						lexerActionExecutor = lexerActionExecutor.fixOffsetBeforeMatch(input.offset - this.startIndex);
+					}
+
+					if (this.closure(input, new LexerATNConfig(c, target, lexerActionExecutor), reach, currentAltReachedAcceptState, true)) {
+						// any remaining configs for this alt have a lower priority than
+						// the one that just reached an accept state.
+						skipAlt = c.alt;
+						break;
+					}
+				}
 			}
-			
-			//todo
 		});
 	},
 	
@@ -433,7 +568,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		configs.setReadonly(true);
 		newState.configs = configs;
 		dfa.states[newState] = newState;
-		console.log('addDFAState() newState = %s', newState);
+		this.logger.debug('addDFAState() newState = %s', newState);
 		return newState;
 	},
 	/**
@@ -441,11 +576,11 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 	*/
 	closure:function(input, config, configs, currentAltReachedAcceptState, speculative){
 		if ( debug ) {
-			console.log("closure("+config.toString()+")");
+			this.logger.debug("closure("+config.toString()+")");
 		}
 		if ( config.state.type == 'ruleStop' ) {
 			if(debug)
-				console.log("closure at %s rule stop %s\n", config.state.ruleName, config);
+				this.logger.debug("closure at %s rule stop %s\n", config.state.ruleName, config);
 			if ( config.context == null || config.context.hasEmptyPath() ) {
 				if (config.context == null || config.context.isEmpty()) {
 					configs.add(config);
@@ -529,7 +664,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 			 */
 			 	var pt = t;
 				if ( debug ) {
-					console.log("EVAL rule "+pt.ruleName+":"+pt.predIndex);
+					this.logger.debug("EVAL rule "+pt.ruleName+":"+pt.predIndex);
 				}
 				configs.hasSemanticContext = true;
 				if (this.evaluatePredicate(input, pt.ruleIndex, pt.predContent, speculative)) {
@@ -556,7 +691,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 	
 	evaluatePredicate:function(input, ruleName, predContent, speculative){
 		//todo
-		console.log('evaluatePredicate() --> %s', predContent);
+		this.logger.debug('evaluatePredicate() --> %s', predContent);
 		return true;
 	}
 });
@@ -614,10 +749,22 @@ function generateLexer(atn){
 	}
 }
 
+function _LexerNoViableAltException(lexer, input, startIndex, deadEndConfigs){
+	var e = new Error('LexerNoViableAlt');
+	e.recognizer = lexer;
+	e.input = input;
+	e.ctx = null;
+	e.startIndex = startIndex;
+	e.deadEndConfigs = deadEndConfigs;
+	return e;
+}
+
 module.exports = {
 	ATNConfig: ATNConfig,
 	PredictionContext: PredictionContext,
 	SingletonPredictionContext: SingletonPredictionContext,
 	EmptyPredictionContext: EmptyPredictionContext,
-	generateLexer:generateLexer
+	generateLexer:generateLexer,
+	DFA: DFA,
+	LexerATNSimulator: LexerATNSimulator
 };

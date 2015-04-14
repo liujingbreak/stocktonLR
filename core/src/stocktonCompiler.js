@@ -10,7 +10,8 @@ var grmParser = require('./stockton-grammar-parser.js'),
 	EmptyPredictionContext = srt.EmptyPredictionContext,
 	ATNConfig = srt.ATNConfig,
 	cycle = require('cycle');
-	
+
+var 	Log4js = require('log4js');
 /** @class AST */
 AST = {
 	getFirstChildWithType:function(ast, type){
@@ -89,21 +90,23 @@ var Transition = {
 };
 
 Compiler.prototype = {
+	logger: Log4js.getLogger('Compiler'),
+	
 	debugATN:function(){
 		this.atn.states.forEach(function(state, index){
 				var s = _.clone(state);
 				delete s.transitions;
-				console.log('state[%d]= %s', index, s.type);
+				this.logger.debug('state[%d]= %s', index, s.type);
 				var str = '';
 				_.each(s, function(v, f){
 						str += f + ':'+ (typeof(v) == 'function'? '<f>' : v );
 						str += ', ';
 				});
-				console.log('\t%s', str);
+				this.logger.debug('\t%s', str);
 		});
 		
 		this.atn.decisionToState.forEach(function(ds, index){
-				console.log('decisionToState[%d] = %s', index, ds);
+				this.logger.debug('decisionToState[%d] = %s', index, ds);
 		}, this);
 	},
 	
@@ -119,14 +122,14 @@ Compiler.prototype = {
 				this.lexRuleASTs.push(ruleAst);
 				if(!ruleAst.fragment){
 					tokenNum++;
-					console.log('find lex rule: %s', ruleAst.name);
+					this.logger.debug('find lex rule: %s', ruleAst.name);
 				}
 			}else if(ruleAst.type == 'tokens'){
 				tokenNum += ruleAst.child.length;
 			}
 		}, this);
 		this.atn.maxTokenType = tokenNum;
-		console.log('tokenNum: %d', tokenNum);
+		this.logger.debug('tokenNum: %d', tokenNum);
 		// CREATE ATN FOR EACH RULE
 		this.createATN();
 		
@@ -307,7 +310,7 @@ Compiler.prototype = {
 				}else{
 					var ruleAST = this.lexRuleASTMap[ast.name];
 					if(ruleAST == null){
-						console.log("undefined rule: "+ ast.name);
+						this.logger.debug("undefined rule: "+ ast.name);
 						return null;
 					}
 					var start = this.atn.ruleToStartState[ast.name];
@@ -531,7 +534,7 @@ Compiler.prototype = {
 				if(ast.fragment)
 					return;
 				var look = this.LL1Analyzer(this.atn.ruleToStartState[ast.name], null, null);
-				console.log('analysis_processLexer() look = %s\n', look.intervals.join(' , '));
+				this.logger.debug('analysis_processLexer() look = %s\n', look.intervals.join(' , '));
 				if (look.contains(-2))
 					throw new Error('EPSILON_TOKEN in rule: '+ ast.name);
 		}, this);
@@ -597,11 +600,11 @@ Compiler.prototype = {
 	LL1Analyzer_look:function(s, stopState, ctx, look, lookBusy, calledRuleStack,
 		seeThruPreds, addEOF)
 	{
-		console.log('LL1Analyzer_look state %d\nlookBusy=%s', s.stateNumber, _.keys(lookBusy).join());
+		this.logger.debug('LL1Analyzer_look state %d\nlookBusy=%s', s.stateNumber, _.keys(lookBusy).join());
 		var c = new ATNConfig(s, 0, ctx);
 		if(lookBusy.hasOwnProperty(c))
 			return;
-		console.log('LL1Analyzer_look state %d continue', s.stateNumber);
+		this.logger.debug('LL1Analyzer_look state %d continue', s.stateNumber);
 		lookBusy[c] = true;
 		if (s == stopState) {
 			if (ctx == null) {
@@ -682,6 +685,8 @@ function ATNState(type){
 	this.stateNumber = -1;
 }
 ATNState.prototype = {
+	logger: Log4js.getLogger('ATNState'),
+	
 	addTransition:function(index, t){
 		if(t === undefined){
 			t = index;
@@ -691,7 +696,7 @@ ATNState.prototype = {
 			this.epsilonOnlyTransitions = (t.type == 'epsilon');
 		else if(this.epsilonOnlyTransitions != (t.type == 'epsilon')){
 			this.epsilonOnlyTransitions = false;
-			console.log('ATN state %s has both epsilon and non-epsilon transitions.', this.type);
+			this.logger.debug('ATN state %s has both epsilon and non-epsilon transitions.', this.type);
 		}
 		if(index === null)
 			this.transitions.push(t);
@@ -897,6 +902,8 @@ function LeftRecursionDetector(ast, atn, compiler){
 }
 
 LeftRecursionDetector.prototype = {
+	logger: Log4js.getLogger('LeftRecursionDetector'),
+	
 	check:function(){
 		if(arguments.length > 0)
 			return this._check.apply(this, arguments);
@@ -951,7 +958,7 @@ LeftRecursionDetector.prototype = {
 	},
 	
 	addRulesToCycle:function(enclosingRuleName, targetRuleName){
-		console.log("left-recursion to "+targetRuleName+" from "+enclosingRuleName);
+		this.logger.debug("left-recursion to "+targetRuleName+" from "+enclosingRuleName);
 		var foundCycle = false;
 		_.each(this.listOfRecursiveCycles, function(rulesInCycle){
 			// ensure both rules are in same cycle
