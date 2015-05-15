@@ -756,6 +756,7 @@ function _LexerNoViableAltException(lexer, input, startIndex, deadEndConfigs){
 	e.ctx = null;
 	e.startIndex = startIndex;
 	e.deadEndConfigs = deadEndConfigs;
+	console.log('startIndex: '+ e.startIndex);
 	return e;
 }
 
