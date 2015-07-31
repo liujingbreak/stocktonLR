@@ -1,10 +1,106 @@
+//'use strict';
+
 var _ = require("lodash");
 var util = require('util');
 var LL = require('./baseLLParser');
 var 	Log4js = require('log4js');
+var sutil = require('./stockton-util');
+var IntervalSet = require('./misc.js').IntervalSet;
 
 var logger = Log4js.getLogger('stocktonRuntime');
+
 var debug = true;
+
+/*
+var Transition = {
+	label:function(tran){
+		switch(tran.type){
+			case 'atom':
+				return IntervalSet.of(tran.label);
+			case 'range':
+				return IntervalSet.of(tran.from, tran.to);
+			case 'set':
+				return tran.set;
+			default:
+				return null;
+		}
+	},
+
+	matches:function(tran, symbol, minVocabSymbol, maxVocabSymbol) {
+		switch(tran.type){
+			case 'atom':
+				return tran.label == symbol;
+			case 'set':
+				return tran.set.contains(symbol);
+			case 'notSet':
+				return symbol >= minVocabSymbol
+					&& symbol <= maxVocabSymbol
+					&& !tran.set.contains(symbol);
+			case 'wildcard':
+				return symbol >= minVocabSymbol && symbol <= maxVocabSymbol;
+			case 'range':
+				return symbol >= tran.from && symbol <= tran.to;
+			case 'predicate':
+			case 'precedence':
+			case 'epsilon':
+			case 'rule':
+			case 'action':
+				return false;
+		}
+	}
+};
+*/
+
+var RETURN_FALSE = function(){
+	return false;
+};
+
+var TransitionMatches = {
+	precedence: RETURN_FALSE,
+	predicate: RETURN_FALSE,
+	epsilon: RETURN_FALSE,
+	action: RETURN_FALSE,
+	atom:function(tran, symbol){
+		return tran.label === symbol;
+	},
+	range:function(tran, symbol, minVocabSymbol, maxVocabSymbol) {
+		return symbol >= tran.from && symbol <= tran.to;
+	},
+	rule: RETURN_FALSE,
+
+	set:function(tran, symbol){
+		return tran.set.contains(symbol);
+	},
+
+	notSet:function(tran, symbol, minVocabSymbol, maxVocabSymbol){
+		return symbol >= minVocabSymbol && symbol <= maxVocabSymbol &&
+			!TransitionMatches.set(tran, symbol, minVocabSymbol, maxVocabSymbol);
+	},
+
+	wildcard:function(tran, symbol, minVocabSymbol, maxVocabSymbol){
+		return symbol >= minVocabSymbol && symbol <= maxVocabSymbol;
+	}
+};
+
+Transition = {
+	label:function(tran){
+		switch(tran.type){
+			case 'atom':
+				return IntervalSet.of(tran.label);
+			case 'range':
+				return IntervalSet.of(tran.from, tran.to);
+			case 'set':
+				return tran.set;
+			default:
+				return null;
+		}
+	},
+
+	matches:function(tran, moreArgs){
+		return TransitionMatches[tran.type].apply(this, arguments);
+	}
+};
+
 function PredictionContext(cachedHashCode){
 	this.cachedHashCode = cachedHashCode;
 }
@@ -20,11 +116,151 @@ PredictionContext.fromRuleContext = function(atn, outerContext){
 	return new SingletonPredictionContext(parent, transition.followState.stateNumber);
 };
 
-PredictionContext.merge = function(){
-	//todo
+PredictionContext.merge = function(/*PredictionContext*/ a, /*PredictionContext*/ b,
+		 rootIsWildcard, mergeCache)
+{
+	if(!( a!=null && b!=null))
+		throw new Error('assertion failure in PredictionContext.merge()'); // must be empty context, never null
+
+	// share same graph if both same
+	if ( a==b || a.equals(b) ) return a;
+    
+	if ( a instanceof SingletonPredictionContext && b instanceof SingletonPredictionContext) {
+		return PredictionContext.mergeSingletons(a,b, rootIsWildcard, mergeCache);
+	}
+    
+	// At least one of a or b is array
+	// If one is $ and rootIsWildcard, return $ as * wildcard
+	if ( rootIsWildcard ) {
+		if ( a instanceof EmptyPredictionContext ) return a;
+		if ( b instanceof EmptyPredictionContext ) return b;
+	}
+    
+	// convert singleton so both are arrays to normalize
+	if ( a instanceof SingletonPredictionContext ) {
+		a = new ArrayPredictionContext(a);
+	}
+	if ( b instanceof SingletonPredictionContext) {
+		b = new ArrayPredictionContext(b);
+	}
+	return mergeArrays(a, b, rootIsWildcard, mergeCache);
 };
 
-PredictionContext.EMPTY_RETURN_STATE = Number.MAX_VALUE;
+_.extend(PredictionContext, {
+	mergeSingletons: function(a,b,rootIsWildcard, mergeCache){
+		if ( mergeCache!=null ) {
+			var previous = mergeCache.get(a,b);
+			if ( previous!=null ) return previous;
+			previous = mergeCache.get(b,a);
+			if ( previous!=null ) return previous;
+		}
+
+		var rootMerge = PredictionContext.mergeRoot(a, b, rootIsWildcard);
+		if ( rootMerge!=null ) {
+			if ( mergeCache!=null ) mergeCache.put(a, b, rootMerge);
+			return rootMerge;
+		}
+
+		if ( a.returnState==b.returnState ) { // a == b
+			var parent = PredictionContext.merge(a.parent, b.parent, rootIsWildcard, mergeCache);
+			// if parent is same as existing a or b parent or reduced to a parent, return it
+			if ( parent == a.parent ) return a; // ax + bx = ax, if a=b
+			if ( parent == b.parent ) return b; // ax + bx = bx, if a=b
+			// else: ax + ay = a'[x,y]
+			// merge parents x and y, giving array node with x,y then remainders
+			// of those graphs.  dup a, a' points at merged array
+			// new joined parent so create new singleton pointing to it, a'
+			var a_ = SingletonPredictionContext.create(parent, a.returnState);
+			if ( mergeCache!=null ) mergeCache.put(a, b, a_);
+			return a_;
+		}
+		else { // a != b payloads differ
+			// see if we can collapse parents due to $+x parents if local ctx
+			var singleParent = null;
+			if ( a==b || (a.parent!=null && a.parent.equals(b.parent)) ) { // ax + bx = [a,b]x
+				singleParent = a.parent;
+			}
+			if ( singleParent!=null ) {	// parents are same
+				// sort payloads and use same parent
+				var payloads = [a.returnState, b.returnState];
+				if ( a.returnState > b.returnState ) {
+					payloads[0] = b.returnState;
+					payloads[1] = a.returnState;
+				}
+				var parents = [singleParent, singleParent];
+				var a_ = new ArrayPredictionContext(parents, payloads);
+				if ( mergeCache!=null ) mergeCache.put(a, b, a_);
+				return a_;
+			}
+			// parents differ and can't merge them. Just pack together
+			// into array; can't merge.
+			// ax + by = [ax,by]
+			var payloads = [a.returnState, b.returnState];
+			var parents = [a.parent, b.parent];
+			if ( a.returnState > b.returnState ) { // sort by payload
+				payloads[0] = b.returnState;
+				payloads[1] = a.returnState;
+				parents = [b.parent, a.parent];
+			}
+			var a_ = new ArrayPredictionContext(parents, payloads);
+			if ( mergeCache!=null ) mergeCache.put(a, b, a_);
+			return a_;
+		}
+	},
+	
+	mergeRoot:function( a, b, rootIsWildcard)
+	{
+		if ( rootIsWildcard ) {
+			if ( a == PredictionContext.EMPTY ) return PredictionContext.EMPTY;  // * + b = *
+			if ( b == PredictionContext.EMPTY ) return PredictionContext.EMPTY;  // a + * = *
+		}
+		else {
+			if ( a == PredictionContext.EMPTY && b == PredictionContext.EMPTY ) return PredictionContext.EMPTY; // $ + $ = $
+			if ( a == PredictionContext.EMPTY ) { // $ + x = [$,x]
+				var payloads = [b.returnState, PredictionContext.EMPTY_RETURN_STATE];
+				var parents = [b.parent, null];
+				var joined =
+					new ArrayPredictionContext(parents, payloads);
+				return joined;
+			}
+			if ( b == PredictionContext.EMPTY ) { // x + $ = [$,x] ($ is always first if present)
+				var payloads = [a.returnState, EMPTY_RETURN_STATE];
+				var parents = [a.parent, null];
+				var joined =
+					new ArrayPredictionContext(parents, payloads);
+				return joined;
+			}
+		}
+		return null;
+	},
+	calculateHashCode:function(parent, returnState){
+		if(Array.isArray(parent)){
+			return PredictionContext._calculateHashCode(parent, returnState);
+		}
+		return JSON.stringify({
+			p:parent.toString(),
+			r:returnState
+		});
+	},
+	
+	_calculateHashCode:function( parents, returnStates) {
+		var ps = [];
+		parents.forEach(function(pa){
+			ps.push(pa.hashCode());
+		});
+		
+		return JSON.stringify({
+			ps:ps,
+			rs:returnStates
+		});
+	},
+	calculateEmptyHashCode:function(){
+		return '';
+	}
+});
+
+
+PredictionContext.EMPTY_RETURN_STATE = 0xffffffff;
 PredictionContext.prototype = {
 	EMPTY_RETURN_STATE: PredictionContext.EMPTY_RETURN_STATE,
 
@@ -32,26 +268,24 @@ PredictionContext.prototype = {
 		return this == PredictionContext.EMPTY;
 	},
 	toString:function(){
-		return this.cachedHashCode;
+		return this.hashCode();
 	},
-	calculateHashCode:function(parent, returnState){
-		return JSON.stringify({
-			p:parent.toString(),
-			r:returnState
-		});
-	},
-	calculateEmptyHashCode:function(){
-		return '';
-	},
-	
 	hasEmptyPath:function(){
 		return this.getReturnState(this.size() - 1) == this.EMPTY_RETURN_STATE;
+	},
+	
+	equals:function(o){
+		return this === o;
+	},
+	
+	hashCode: function() {
+		return this.cachedHashCode;
 	}
 };
 
 function SingletonPredictionContext(parent, returnState){
 	PredictionContext.call(this, 
-		parent != null? this.calculateHashCode(parent, returnState) : this.calculateEmptyHashCode());
+		parent != null? PredictionContext.calculateHashCode(parent, returnState) : PredictionContext.calculateEmptyHashCode());
 	if(returnState == -1) throw new Error('Invalid state number');
 	this.parent = parent;
 	this.returnState = returnState;
@@ -75,6 +309,23 @@ SingletonPredictionContext.prototype = _.create(PredictionContext.prototype, {
 	},
 	getParent:function(index){
 		return this.parent;
+	},
+	
+	equals:function(o) {
+		if (this == o) {
+			return true;
+		}
+		else if ( !(o instanceof SingletonPredictionContext) ) {
+			return false;
+		}
+
+		if ( this.hashCode() !== o.hashCode() ) {
+			return false; // can't be same if hash is different
+		}
+
+		var s = o
+		return returnState === s.returnState &&
+			(parent!=null && parent.equals(s.parent));
 	}
 });
 
@@ -87,10 +338,64 @@ EmptyPredictionContext.prototype = _.create(SingletonPredictionContext.prototype
 			return 1;
 		},
 		getReturnState:function(index){
-			this.returnState;
+			return this.returnState;
 		}
 });
 PredictionContext.EMPTY = new EmptyPredictionContext();
+
+/*
+@param a SingletonPredictionContext
+*/
+function ArrayPredictionContext(parents, returnStates){
+	if(arguments.length === 1){
+		var a = arguments[0];
+		return ArrayPredictionContext([a.parent], [a.returnState]);
+	}
+	PredictionContext.call(this, PredictionContext.calculateHashCode(parents, returnStates));
+	if(parents!=null && parents.length>0)
+		throw new Error();
+	
+	if(returnStates!=null && returnStates.length>0)
+		throw new Error();
+//	System.err.println("CREATE ARRAY: "+Arrays.toString(parents)+", "+Arrays.toString(returnStates));
+	this.parents = parents;
+	this.returnStates = returnStates;
+}
+
+ArrayPredictionContext.prototype = _.create(PredictionContext.prototype, {
+	isEmpty:function(){
+		return this.returnStates[0]=== PredictionContext.EMPTY_RETURN_STATE;
+	},
+	size:function() {
+		return this.returnStates.length;
+	},
+	getParent:function(index){
+		return this.parents[index];
+	},
+	getReturnState:function(index){
+		return this.returnStates[index];
+	},
+	
+	equals:function(o){
+		if (this == o) {
+			return true;
+		}
+		else if ( !(o instanceof ArrayPredictionContext) ) {
+			return false;
+		}
+
+		if ( this.hashCode() != o.hashCode() ) {
+			return false; // can't be same if hash is different
+		}
+
+		var a = o;
+		return sutil.Arrays_equals(returnStates, a.returnStates) &&
+		       sutil.Arrays_equals(parents, a.parents);
+	}
+});
+			
+
+
 	
 function ATNConfig(state, alt, context, semanticContext){
 	if(semanticContext === undefined)
@@ -191,9 +496,30 @@ DFAState.prototype ={
 	}
 };
 
-function ConfigHashSet(){
-	
+function ConfigHashSet(hashStringFunc){
+	this.hashStringFunc = hashStringFunc;
+	this.set = {};
 }
+
+ConfigHashSet.prototype = {
+	add:function(o){
+		this.set[this.hashStringFunc(o)] = o;
+	},
+	
+	getOrAdd:function(o){
+		var key = this.hashStringFunc(o);
+		if(this.set.hasOwnProperty(key)){
+			this.set[key] = o;
+			return this.set[key];
+		}
+		this.set[key] = o;
+		return o;
+	},
+	
+	exists:function(o){
+		return this.set.hasOwnProperty(this.hashStringFunc(o));
+	}
+};
 
 
 function ATNConfigSet(){
@@ -202,11 +528,18 @@ function ATNConfigSet(){
 	this.readonly = false;
 	this.fullCtx = true;
 	this.cachedHashCode = -1;
-	//this.configLookup = null;
+	this.configLookup = new ConfigHashSet(
+		function(atnConfig){
+			return 'ss:'+ atnConfig.state.stateNumber +
+				',a:'+ atnConfig.alt + ', s:'+ atnConfig.semanticContext;
+	});
 }
 
 ATNConfigSet.prototype = {
-	add:function(config, mergeCache){
+	logger: Log4js.getLogger('ATNConfigSet'),
+
+	add:function(config, /* can be null */mergeCache){
+		this.logger.debug('add('+ config +')');
 		if ( this.readonly ) throw new Error("This set is readonly");
 		if ( config.semanticContext!=SemanticContext.NONE ) {
 			this.hasSemanticContext = true;
@@ -214,12 +547,13 @@ ATNConfigSet.prototype = {
 		if (config.reachesIntoOuterContext > 0) {
 			this.dipsIntoOuterContext = true;
 		}
-		if(!this.configLookup.hasOwnProperty(config)){
+		this.logger.debug(this.configLookup);
+		var existing = this.configLookup.getOrAdd(config);
+		if(existing == config){
 			this.cachedHashCode = -1;
 			this.configs.push(config);  // track order here
 			return true;
 		}
-		var existing = this.configLookup[config];
 		// a previous (s,i,pi,_), merge with it and save result
 		var rootIsWildcard = !this.fullCtx;
 		var merged =
@@ -256,7 +590,9 @@ ATNConfigSet.prototype = {
 //@finished
 function OrderedATNConfigSet(){
 	ATNConfigSet.call(this);
-	this.configLookup = {};
+	this.configLookup = new ConfigHashSet(function(o) {
+		return o.hashCode? o.hashCode() : o.toString();
+	});
 }
 OrderedATNConfigSet.prototype = _.create(ATNConfigSet.prototype);
 
@@ -266,7 +602,7 @@ function ATNSimulator(atn, sharedContextCache){
 }
 
 ATNSimulator.ERROR = new DFAState(new ATNConfigSet());
-ATNSimulator.ERROR.stateNumber = Number.MAX_VALUE;
+ATNSimulator.ERROR.stateNumber = 0xffffffff;
 
 ATNSimulator.prototype ={
 	ERROR: ATNSimulator.ERROR
@@ -323,7 +659,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 	matchATN:function(input){
 		var startState = this.atn.states[this.mode];
 		if ( debug ) {
-			this.logger.debug("matchATN() mode %d start: %s\n", this.mode, startState);
+			this.logger.debug("matchATN() mode %d start: %s\n", this.mode, util.inspect(startState));
 		}
 		var old_mode = this.mode;
 		var s0_closure = this.computeStartState(input, startState);
@@ -333,7 +669,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		if (!suppressEdge) {
 			this.decisionToDFA[this.mode].s0 = next;
 		}
-		this.logger.debug('suppressEdge: %j, s0 = %s\ns0_closure = %s', suppressEdge, next+'', s0_closure.toString());
+		this.logger.debug('matchATN() suppressEdge: %j, s0 = %s\ns0_closure = %s', suppressEdge, next+'', s0_closure.toString());
 		var predict = this.execATN(input, next);
 
 		if ( debug ) {
@@ -354,14 +690,15 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 				this.logger.debug("execATN() execATN loop starting closure: %s\n", s.configs);
 			}
 			var target = this.getExistingTargetState(s, t);
+			this.logger.debug('1. target='+ target);
 			if (target == null) {
 				target = this.computeTargetState(input, s, t);
 			}
-			
+			this.logger.debug('2. target='+ util.inspect(target));
 			if (target == this.ERROR) {
 				break;
 			}
-			
+			this.logger.debug('3. no ERROR');
 			if (target.isAcceptState) {
 				/** todo */this.captureSimState(this.prevAccept, input, target);
 				if (t == LL.Lexer.prototype.EOF) {
@@ -387,7 +724,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		}
 		else {
 			// if no accept and EOF is first char, return EOF
-			if ( t==LL.Lexer.prototype.EOF && input.offset == startIndex ) {
+			if ( t === LL.Lexer.prototype.EOF && input.offset === startIndex ) {
 				return LL.Lexer.prototype.EOF;
 			}
 
@@ -432,7 +769,10 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		// if we don't find an existing DFA state
 		// Fill reach starting from closure, following t transitions
 		this.getReachableConfigSet(input, s.configs, reach, t);
-
+		this.logger.debug('computeTargetState() reach is empty? '+ reach.isEmpty()
+			+ ', s=' + s+ ', t='+ t
+			);
+		
 		if ( reach.isEmpty() ) { // we got nowhere on t from s
 			if (!reach.hasSemanticContext) {
 				// we got nowhere on t, don't throw out this knowledge; it'd
@@ -461,7 +801,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 			return;
 		}
 		if ( debug ) {
-			this.logger.debug("EDGE "+p+" -> "+q+" upon "+ t );
+			this.logger.debug("addDFAEdge() EDGE "+p+" -> "+q+" upon "+ t );
 		}
 		if ( p.edges==null ) {
 			//  make room for tokens 1..n and -1 masquerading as index 0
@@ -506,23 +846,27 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 	
 	getReachableConfigSet:function(input, closure, reach, t){
 		var skipAlt = 0;
-		_.each(closure.configs, function(c){
+		closure.configs.forEach(function(c){
 			var currentAltReachedAcceptState = c.alt == skipAlt;
 			if (currentAltReachedAcceptState && c.passedThroughNonGreedyDecision) {
 				return;
 			}
+
 			if(debug)
 				this.logger.debug('getReachableConfigSet() testing %s at %s\n', t, c.toString());
 			var n = c.state.transitions.length;
 			for (var ti=0; ti<n; ti++) {
 				var trans = c.state.transitions[ti];
+				this.logger.debug('getReachableConfigSet() transitions[%d] %s', ti, util.inspect(trans));
+
 				var target = this.getReachableTarget(trans, t);
+				this.logger.debug('target = %s', util.inspect(target))
 				if ( target!=null ) {
 					var lexerActionExecutor = c.lexerActionExecutor;
 					if (lexerActionExecutor != null) {
 						lexerActionExecutor = lexerActionExecutor.fixOffsetBeforeMatch(input.offset - this.startIndex);
 					}
-
+					debugger;
 					if (this.closure(input, new LexerATNConfig(c, target, lexerActionExecutor), reach, currentAltReachedAcceptState, true)) {
 						// any remaining configs for this alt have a lower priority than
 						// the one that just reached an accept state.
@@ -531,11 +875,11 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 					}
 				}
 			}
-		});
+		}, this);
 	},
 	
 	getReachableTarget:function(trans, t){
-		if (trans.matches(t, Character.MIN_VALUE, Character.MAX_VALUE)) {
+		if (Transition.matches(trans, t, 0, 0xffff)) {
 			return trans.target;
 		}
 
@@ -543,6 +887,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 	},
 	
 	addDFAState:function(configs){
+		this.logger.debug('addDFAState() configs = %s', util.inspect(configs));
 		if(configs.hasSemanticContext)
 			throw new Error('configs.hasSemanticContext can\'t be true in here');
 		var proposed = new DFAState(configs);
@@ -568,7 +913,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		configs.setReadonly(true);
 		newState.configs = configs;
 		dfa.states[newState] = newState;
-		this.logger.debug('addDFAState() newState = %s', newState);
+		this.logger.debug('addDFAState() newState = %s', util.inspect(newState));
 		return newState;
 	},
 	/**
@@ -578,7 +923,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		if ( debug ) {
 			this.logger.debug("closure("+config.toString()+")");
 		}
-		if ( config.state.type == 'ruleStop' ) {
+		if ( config.state.type === 'ruleStop' ) {
 			if(debug)
 				this.logger.debug("closure at %s rule stop %s\n", config.state.ruleName, config);
 			if ( config.context == null || config.context.hasEmptyPath() ) {
@@ -614,6 +959,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 
 			return currentAltReachedAcceptState;
 		}
+
 		// optimization
 		if ( !config.state.epsilonOnlyTransitions ) {
 			if (!currentAltReachedAcceptState || !config.passedThroughNonGreedyDecision) {
@@ -622,9 +968,12 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		}
 
 		var p = config.state;
+		this.logger.debug('transitions '+ p.transitions.length);
 		for (var i=0, l= p.transitions.length; i< l; i++) {
+
 			var t = p.transitions[i];
 			var c = this.getEpsilonTarget(input, config, t, configs, speculative);
+			this.logger.debug('transition '+ i+ ' getEpsilonTarget '+ c);
 			if ( c!=null ) {
 				currentAltReachedAcceptState = this.closure(input, c, configs, currentAltReachedAcceptState, speculative);
 			}
@@ -634,7 +983,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 	},
 	
 	getEpsilonTarget:function(input, config, t, configs, speculative){
-		c = null;
+		var c = null;
 		switch (t.type) {
 			case 'rule':
 				var newContext =
@@ -687,6 +1036,8 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 				c = new LexerATNConfig({config: config, state:t.target});
 				break;
 		}
+
+		return c;
 	},
 	
 	evaluatePredicate:function(input, ruleName, predContent, speculative){
@@ -695,43 +1046,6 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		return true;
 	}
 });
-
-var RETURN_FALSE = function(){
-		return false;
-	};
-	
-var TransitionMatches = {
-	precedence: RETURN_FALSE,
-	predicate: RETURN_FALSE,
-	epsilon: RETURN_FALSE,
-	action: RETURN_FALSE,
-	atom:function(tran, symbol){
-		return trans.label == symbol;
-	},
-	range:function(tran, symbol, minVocabSymbol, maxVocabSymbol) {
-		return symbol >= tran.from && symbol <= tran.to;
-	},
-	rule: RETURN_FALSE,
-	
-	set:function(tran, symbol){
-		return tran.set.contains(symbol);
-	},
-	
-	notSet:function(tran, symbol, minVocabSymbol, maxVocabSymbol){
-		return symbol >= minVocabSymbol && symbol <= maxVocabSymbol &&
-			!TransitionMatches.set(tran, symbol, minVocabSymbol, maxVocabSymbol);
-	},
-	
-	wildcard:function(tran, symbol, minVocabSymbol, maxVocabSymbol){
-		return symbol >= minVocabSymbol && symbol <= maxVocabSymbol;
-	}
-};
-
-Transition = {
-	matches:function(tran, moreArgs){
-		return TransitionMatches[tran.type].apply(tran, _.toArray(arguments).slice(1));
-	}
-};
 
 function DFA(json){
 	_.extend(this, json);
@@ -767,5 +1081,6 @@ module.exports = {
 	EmptyPredictionContext: EmptyPredictionContext,
 	generateLexer:generateLexer,
 	DFA: DFA,
-	LexerATNSimulator: LexerATNSimulator
+	LexerATNSimulator: LexerATNSimulator,
+	Transition: Transition
 };

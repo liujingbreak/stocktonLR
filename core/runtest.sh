@@ -1,1 +1,1 @@
-node_modules/jasmine-node/bin/jasmine-node spec
+node debug jasmine-node-debug.js spec

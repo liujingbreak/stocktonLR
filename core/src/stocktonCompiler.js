@@ -1,5 +1,6 @@
 var grmParser = require('./stockton-grammar-parser.js'),
 	_ = require("lodash"),
+	util = require('util'),
 	stUtil = require('./stockton-util.js'),
 	RangeUtil = stUtil.RangeUtil,
 	IntervalSet = require('./misc.js').IntervalSet,
@@ -11,7 +12,11 @@ var grmParser = require('./stockton-grammar-parser.js'),
 	ATNConfig = srt.ATNConfig,
 	cycle = require('cycle');
 
-var 	Log4js = require('log4js');
+var Transition = srt.Transition;
+
+var 	Log4js = require('log4js'),
+	logger = Log4js.getLogger('stocktonCompiler');
+
 /** @class AST */
 AST = {
 	getFirstChildWithType:function(ast, type){
@@ -74,20 +79,9 @@ function isEpsilon(transition){
 		return EPSILON_TYPES[transition.type];
 }
 
-var Transition = {
-	label:function(tran){
-		switch(tran.type){
-		case 'atom':
-			return IntervalSet.of(tran.label);
-		case 'range':
-			return IntervalSet.of(tran.from, tran.to);
-		case 'set':
-			return tran.set;
-		default:
-			return null;
-		}
-	}
-};
+
+
+logger.debug('Transition:' + util.inspect(Transition));
 
 Compiler.prototype = {
 	logger: Log4js.getLogger('Compiler'),
@@ -666,6 +660,7 @@ Compiler.prototype = {
 			}else if(t.type == 'wildcard'){
         			look.addAll( IntervalSet.of(1, this.atn.maxTokenType) );
         		}else{
+					this.logger.debug('Transition:' + util.inspect(Transition));
         			var set = Transition.label(t);
 				if (set != null) {
 					if (t.type == 'notSet') {
@@ -985,5 +980,6 @@ LeftRecursionDetector.prototype = {
 
 
 module.exports = {
-	Compiler: Compiler
+	Compiler: Compiler,
+	Transition: Transition
 };

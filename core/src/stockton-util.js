@@ -1,3 +1,4 @@
+var _ = require("lodash");
 
 var RangeUtil = {
 	
@@ -29,3 +30,47 @@ var RangeUtil = {
 };
 
 exports.RangeUtil = RangeUtil;
+
+function DoubleKeyMap(){
+	this.data = {};
+}
+DoubleKeyMap.prototype ={
+	get:function(k1, k2){
+		var data2 = this.data[k1.toString()];
+		if ( data2==null ) return null;
+		return data2[k2.toString()];
+	},
+	
+	put: function(k1, k2, v){
+		k1 = k1.toString();
+		k2 = k2.toString();
+		var data2 = this.data[k1];
+		var prev = null;
+		if ( data2==null ) {
+			data2 = {};
+			this.data[k1] = data2;
+		}
+		else {
+			prev = data2[k2];
+		}
+		data2[k2] = v;
+		return prev;
+	}
+};
+
+Arrays_equals = function(a1, a2){
+	if(a1.length == a2.length){
+		return a1.every(function(e1, i){
+			return e1 == a2[i];
+		});
+	}
+	return false;
+};
+
+_.extend(exports, {
+	DoubleKeyMap:DoubleKeyMap,
+	Arrays_equals: Arrays_equals
+});
+
+
+

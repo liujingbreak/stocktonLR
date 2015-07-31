@@ -58,7 +58,7 @@ describe('stockton grammar parser', function(){
 			_decisionToDFA.push(new stRuntime.DFA({atnStartState: s, decision: i}));
 		});
 		var _interp = new stRuntime.LexerATNSimulator(atn, _decisionToDFA, null);
-		var input = new LL.Lexer('123');
+		var input = new LL.Lexer('987');
 		var type = _interp.match(input, 0);
 		console.log('match type = '+ type);
 	});
