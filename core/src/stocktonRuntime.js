@@ -695,19 +695,19 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 				target = this.computeTargetState(input, s, t);
 			}
 			this.logger.debug('2. target='+ util.inspect(target));
-			if (target == this.ERROR) {
+			if (target === this.ERROR) {
 				break;
 			}
 			this.logger.debug('3. no ERROR');
 			if (target.isAcceptState) {
-				/** todo */this.captureSimState(this.prevAccept, input, target);
-				if (t == LL.Lexer.prototype.EOF) {
+				this.captureSimState(this.prevAccept, input, target);
+				if (t === LL.Lexer.prototype.EOF) {
 					break;
 				}
 			}
 
-			if (t != LL.Lexer.prototype.EOF) {
-				/** todo */this.consume(input);
+			if (t !== LL.Lexer.prototype.EOF) {
+				this.consume(input);
 				t = input.la(1);
 			}
 			s = target;
@@ -724,12 +724,32 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		}
 		else {
 			// if no accept and EOF is first char, return EOF
-			if ( t === LL.Lexer.prototype.EOF && input.offset === startIndex ) {
+			if ( t === LL.Lexer.prototype.EOF && input.offset === this.startIndex ) {
 				return LL.Lexer.prototype.EOF;
 			}
 
 			throw _LexerNoViableAltException(this.recog, input, this.startIndex, reach);
 		}
+	},
+
+	accept:function(input, lexerActionExecutor, startIndex, index, line, charPos) {
+		if ( debug ) {
+			this.logger.debug('ACTION %s\n', lexerActionExecutor);
+		}
+
+		// seek to after last char in token
+		//input.seek(index);
+		input.offset = index;
+		this.line = line;
+		this.charPositionInLine = charPos;
+		if (input.LA(1) !== LL.Lexer.prototype.EOF) {
+			this.consume(input);
+		}
+
+		if (lexerActionExecutor != null && this.recog != null) {
+			lexerActionExecutor.execute(this.recog, input, startIndex);
+		}
+
 	},
 	
 	getExistingTargetState:function(s, t){
@@ -769,8 +789,8 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		// if we don't find an existing DFA state
 		// Fill reach starting from closure, following t transitions
 		this.getReachableConfigSet(input, s.configs, reach, t);
-		this.logger.debug('computeTargetState() reach is empty? '+ reach.isEmpty()
-			+ ', s=' + s+ ', t='+ t
+		this.logger.debug('computeTargetState() reach is empty? '+ reach.isEmpty()+
+			', s=' + s+ ', t='+ t
 			);
 		
 		if ( reach.isEmpty() ) { // we got nowhere on t from s
@@ -815,7 +835,8 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 			throw new Error('failed to assert !configs.hasSemanticContext');
 		var proposed = new DFAState(configs);
 		var firstConfigWithRuleStopState = null;
-		configs.some(function(c){
+
+		configs.configs.some(function(c){
 			if ( c.state.type === 'ruleStop' )	{
 				firstConfigWithRuleStopState = c;
 				return true;
@@ -866,7 +887,6 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 					if (lexerActionExecutor != null) {
 						lexerActionExecutor = lexerActionExecutor.fixOffsetBeforeMatch(input.offset - this.startIndex);
 					}
-					debugger;
 					if (this.closure(input, new LexerATNConfig(c, target, lexerActionExecutor), reach, currentAltReachedAcceptState, true)) {
 						// any remaining configs for this alt have a lower priority than
 						// the one that just reached an accept state.
@@ -1044,6 +1064,24 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		//todo
 		this.logger.debug('evaluatePredicate() --> %s', predContent);
 		return true;
+	},
+
+	consume:function(input) {
+		var curChar = input.la(1);
+		if ( curChar==='\n' ) {
+			line++;
+			this.charPositionInLine=0;
+		} else {
+			this.charPositionInLine++;
+		}
+		input.consume();
+	},
+
+	captureSimState:function(settings, input, dfaState) {
+		settings.index = input.offset;
+		settings.line = this.line;
+		settings.charPos = this.charPositionInLine;
+		settings.dfaState = dfaState;
 	}
 });
 

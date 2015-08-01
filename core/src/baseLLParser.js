@@ -3,19 +3,20 @@ var assert = require('assert');
 var EOF = -1;
 
 function mixin(target, obj){
-	for(f in obj){
-		target[f] = obj[f];
+	for(var f in obj){
+        if(obj.hasOwnProperty(f))
+		    target[f] = obj[f];
 	}
 }
-if (typeof Object.create != 'function') {
+if (typeof Object.create !== 'function') {
     (function () {
         var F = function () {};
         Object.create = function (o) {
             if (arguments.length > 1) { throw Error('Second argument not supported');}
             if (o === null) { throw Error('Cannot set a null [[Prototype]]');}
-            if (typeof o != 'object') { throw TypeError('Argument must be an object');}
+            if (typeof o !== 'object') { throw TypeError('Argument must be an object');}
             F.prototype = o;
-            return new F;
+            return new F();
         };
     })();
 }
@@ -151,10 +152,10 @@ Lexer.prototype = {
             num = 1;
         for(var i = num; i; i--){
             
-            if( this.input[this.offset] == '\n'){
+            if( this.input[this.offset] === '\n'){
                 this.lineno++;
                 this.col = 1;
-            }else if(this.input[this.offset] != '\r'){
+            }else if(this.input[this.offset] !== '\r'){
                 this.col++;
             }
             this.offset++;
@@ -298,6 +299,8 @@ Lexer.prototype = {
     }
 };
 
+Lexer.prototype.consume = Lexer.prototype.advance;
+
 function Token(json, lexer){
     mixin(this, json);
     this.lexer = lexer;
@@ -334,7 +337,7 @@ Token.prototype = {
         '], [line '+ this.pos[2] +' - '+ this.pos[3] +
         '], [columen '+ this.pos[4] +' - '+ this.pos[5]+ ']';
     }
-}
+};
 
 function Parser(str, lexerCallback, parserGrammar, channel){
     this.lexer = new Lexer(str, lexerCallback);
@@ -367,7 +370,8 @@ function Parser(str, lexerCallback, parserGrammar, channel){
             next:null
      }, this);
 }
-exports.Parser = Parser;
+
+
 Parser.prototype = {
     classname:'Parser',
     typeName:function(nType){
@@ -760,3 +764,4 @@ Parser.prototype = {
     },
 };
 
+exports.Parser = Parser;
