@@ -36,7 +36,7 @@ describe('stockton grammar parser', function(){
 		console.log(JSON.stringify(ast.result, null, '  '));
 	});
 		
-	xit('compiler process AST -> ATN', function(){
+	it('compiler process AST -> ATN', function(){
 		var compiler = new Compiler();
 		var atn0 = compiler.compile(this.str);
 		//compiler.debugATN();

@@ -685,6 +685,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		}
 		var t = input.la(1);
 		var s = ds0; // s is current/from DFA state
+		var EOF = LL.Lexer.prototype.EOF;
 		while ( true ) { // while more work
 			if ( debug ) {
 				this.logger.debug("execATN() execATN loop starting closure: %s\n", s.configs);
@@ -698,17 +699,18 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 			if (target === this.ERROR) {
 				break;
 			}
-			this.logger.debug('3. no ERROR');
+			this.logger.debug('3. no ERROR target.isAcceptState:' + target.isAcceptState);
 			if (target.isAcceptState) {
 				this.captureSimState(this.prevAccept, input, target);
-				if (t === LL.Lexer.prototype.EOF) {
+				if (t === EOF) {
 					break;
 				}
 			}
 
-			if (t !== LL.Lexer.prototype.EOF) {
+			if (t !== EOF) {
 				this.consume(input);
 				t = input.la(1);
+				this.logger.debug('execATN() next input '+ t);
 			}
 			s = target;
 		}
@@ -805,6 +807,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		}
 
 		// Add an edge from s to target DFA found/created for reach
+		debugger;
 		return this.addDFAEdge(s, t, reach);
 	},
 	
@@ -878,10 +881,8 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 			var n = c.state.transitions.length;
 			for (var ti=0; ti<n; ti++) {
 				var trans = c.state.transitions[ti];
-				this.logger.debug('getReachableConfigSet() transitions[%d] %s', ti, util.inspect(trans));
 
 				var target = this.getReachableTarget(trans, t);
-				this.logger.debug('target = %s', util.inspect(target))
 				if ( target!=null ) {
 					var lexerActionExecutor = c.lexerActionExecutor;
 					if (lexerActionExecutor != null) {
@@ -913,7 +914,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		var proposed = new DFAState(configs);
 		var firstConfigWithRuleStopState = null;
 		_.some(configs.configs, function(c){
-				if(c.state.type == 'ruleStop'){
+				if(c.state.type === 'ruleStop'){
 					firstConfigWithRuleStopState = c;
 					return true;
 				}
