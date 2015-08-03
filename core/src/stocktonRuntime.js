@@ -10,7 +10,7 @@ var IntervalSet = require('./misc.js').IntervalSet;
 var logger = Log4js.getLogger('stocktonRuntime');
 
 var debug = true;
-
+var EOF = LL.Lexer.prototype.EOF;
 /*
 var Transition = {
 	label:function(tran){
@@ -423,6 +423,11 @@ function isDecisionState(state){
 	return _.has(_DECISION_STATE, state.type);
 }
 
+/**
+ *
+ * @param obj an object contains properties, check out prototype.initWithConfig()
+ * @constructor
+ */
 function LexerATNConfig(obj){
 	if(obj.config)
 		this.initWithConfig(obj.config);
@@ -441,7 +446,14 @@ function LexerATNConfig(obj){
 	});
 }
 
+var DECISION_STATES = {startLoop: true, blockStart: true, TokenStart: true, plusLoopBack: true,
+	starBlockStart:true, plusBlockStart:true, basicBlockStart:true};
+
 LexerATNConfig.prototype = _.create(ATNConfig.prototype, {
+	/**
+	 *
+	 * @param config
+	 */
 		initWithConfig: function(config){
 			this.alt = config.alt;
 			this.semanticContext = config.semanticContext;
@@ -450,9 +462,11 @@ LexerATNConfig.prototype = _.create(ATNConfig.prototype, {
 			this.passedThroughNonGreedyDecision = config.passedThroughNonGreedyDecision;
 		},
 		
-		checkNonGreedyDecision:function(checkNonGreedyDecision, target){
-			return checkNonGreedyDecision || isDecisionState(target);
-			// we only support nonGreedy
+		checkNonGreedyDecision:function(source, target){
+			//return checkNonGreedyDecision || isDecisionState(target);
+			return source.passedThroughNonGreedyDecision ||
+				target.type in DECISION_STATES && target.nonGreedy;
+
 		}
 });
 
@@ -522,7 +536,10 @@ ConfigHashSet.prototype = {
 };
 
 
-function ATNConfigSet(){
+function
+
+
+ATNConfigSet(){
 	this.configs = [];
 	this.hasSemanticContext = false;
 	this.readonly = false;
@@ -744,7 +761,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		input.offset = index;
 		this.line = line;
 		this.charPositionInLine = charPos;
-		if (input.LA(1) !== LL.Lexer.prototype.EOF) {
+		if (input.la(1) !== EOF) {
 			this.consume(input);
 		}
 
@@ -787,7 +804,6 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 	
 	computeTargetState:function(input, s, t){
 		var reach = new OrderedATNConfigSet();
-
 		// if we don't find an existing DFA state
 		// Fill reach starting from closure, following t transitions
 		this.getReachableConfigSet(input, s.configs, reach, t);
@@ -807,11 +823,13 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		}
 
 		// Add an edge from s to target DFA found/created for reach
-		debugger;
+
 		return this.addDFAEdge(s, t, reach);
 	},
 	
-	// there is another overwriten addDFAEdge()
+	/** there is another overwriten addDFAEdge()
+	@return DFAState
+	 */
 	addDFAEdge: function(p, t, q){
 		if(q instanceof ATNConfigSet){
 			var suppressEdge = q.hasSemanticContext;
@@ -888,7 +906,14 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 					if (lexerActionExecutor != null) {
 						lexerActionExecutor = lexerActionExecutor.fixOffsetBeforeMatch(input.offset - this.startIndex);
 					}
-					if (this.closure(input, new LexerATNConfig(c, target, lexerActionExecutor), reach, currentAltReachedAcceptState, true)) {
+					if (this.closure(input,
+							new LexerATNConfig({state: target,
+									alt: c.alt,
+									context: c.context,
+									semanticContext: c.semanticContext,
+									reachesIntoOuterContext: c.reachesIntoOuterContext,
+									lexerActionExecutor: lexerActionExecutor}),
+							reach, currentAltReachedAcceptState, true)) {
 						// any remaining configs for this alt have a lower priority than
 						// the one that just reached an accept state.
 						skipAlt = c.alt;
