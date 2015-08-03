@@ -708,11 +708,9 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 				this.logger.debug("execATN() execATN loop starting closure: %s\n", s.configs);
 			}
 			var target = this.getExistingTargetState(s, t);
-			this.logger.debug('1. target='+ target);
 			if (target == null) {
 				target = this.computeTargetState(input, s, t);
 			}
-			this.logger.debug('2. target='+ util.inspect(target));
 			if (target === this.ERROR) {
 				break;
 			}
@@ -731,13 +729,14 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 			}
 			s = target;
 		}
+		debugger;
 		return this.failOrAccept(this.prevAccept, input, s.configs, t);
 	},
 	
 	failOrAccept: function(prevAccept, input, reach, t){
 		if (prevAccept.dfaState != null) {
 			var lexerActionExecutor = prevAccept.dfaState.lexerActionExecutor;
-			/* todo */this.accept(input, lexerActionExecutor, this.startIndex,
+			this.accept(input, lexerActionExecutor, this.startIndex,
 				prevAccept.index, prevAccept.line, prevAccept.charPos);
 			return prevAccept.dfaState.prediction;
 		}
@@ -834,7 +833,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		if(q instanceof ATNConfigSet){
 			var suppressEdge = q.hasSemanticContext;
 			q.hasSemanticContext = false;
-			var to = this._addDFAState(q);
+			var to = this.addDFAState(q);
 			return to;
 		}
 		if (t < this.MIN_DFA_EDGE || t > this.MAX_DFA_EDGE) {
@@ -851,41 +850,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		p.edges[t - this.MIN_DFA_EDGE] = q; // connect
 	},
 	
-	_addDFAState:function(configs){
-		if(configs.hasSemanticContext)
-			throw new Error('failed to assert !configs.hasSemanticContext');
-		var proposed = new DFAState(configs);
-		var firstConfigWithRuleStopState = null;
 
-		configs.configs.some(function(c){
-			if ( c.state.type === 'ruleStop' )	{
-				firstConfigWithRuleStopState = c;
-				return true;
-			}
-			return false;
-		});
-
-		if ( firstConfigWithRuleStopState!=null ) {
-			proposed.isAcceptState = true;
-			proposed.lexerActionExecutor = firstConfigWithRuleStopState.lexerActionExecutor;
-			proposed.prediction = this.atn.ruleToTokenType[firstConfigWithRuleStopState.state.ruleName];
-		}
-
-		var dfa = this.decisionToDFA[this.mode];
-		//synchronized (dfa.states) {
-			existing = dfa.states[proposed.toString()];
-			if ( existing!=null ) return existing;
-
-			var newState = proposed;
-
-			newState.stateNumber = _.size(dfa.states);
-			configs.setReadonly(true);
-			newState.configs = configs;
-			dfa.states[newState.toString()] = newState;
-			return newState;
-		//}
-	},
-	
 	getReachableConfigSet:function(input, closure, reach, t){
 		var skipAlt = 0;
 		closure.configs.forEach(function(c){
@@ -931,20 +896,25 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 
 		return null;
 	},
-	
+
+
+
 	addDFAState:function(configs){
 		this.logger.debug('addDFAState() configs = %s', util.inspect(configs));
 		if(configs.hasSemanticContext)
 			throw new Error('configs.hasSemanticContext can\'t be true in here');
 		var proposed = new DFAState(configs);
 		var firstConfigWithRuleStopState = null;
-		_.some(configs.configs, function(c){
-				if(c.state.type === 'ruleStop'){
-					firstConfigWithRuleStopState = c;
-					return true;
-				}
+
+		configs.configs.some( function(c){
+			if(c.state.type === 'ruleStop'){
+				firstConfigWithRuleStopState = c;
+				return true;
+			}
+			return false;
 		});
 		if ( firstConfigWithRuleStopState ){
+			debugger;
 			proposed.isAcceptState = true;
 			proposed.lexerActionExecutor = firstConfigWithRuleStopState.lexerActionExecutor;
 			proposed.prediction = this.atn.ruleToTokenType[firstConfigWithRuleStopState.state.ruleName];

@@ -49,7 +49,7 @@ describe('stockton grammar parser', function(){
 		debugATN.debugATN(atn, graphPath);
 	});
 	
-	it('LexerATNSimulator.match can work', function(){
+	xit('LexerATNSimulator.match can work', function(){
 		var compiler = new Compiler();
 		var atn = cycle.retrocycle(compiler.compile(this.str));
 		
