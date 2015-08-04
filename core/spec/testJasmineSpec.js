@@ -8,7 +8,13 @@ var stGrammarParser = require('../src/stockton-grammar-parser.js'),
 	util = require('util'),
 	fs = require('fs'),
 	path = require('path'),
-	PredictionContext  = stRuntime.PredictionContext;
+	PredictionContext  = stRuntime.PredictionContext,
+	logger = require('log4js');
+	
+var log = logger.getLogger('testSpec');
+//log.setLevel('INFO');
+logger.getLogger('ATNConfigSet').setLevel('INFO');
+logger.getLogger('LexerATNSimulator').setLevel('INFO');
 
 describe('Compiler', function(){
 	xit('getStringFromGrammarStringLiteral() should work', function(){
@@ -36,7 +42,7 @@ describe('stockton grammar parser', function(){
 		console.log(JSON.stringify(ast.result, null, '  '));
 	});
 		
-	it('compiler process AST -> ATN', function(){
+	xit('compiler process AST -> ATN', function(){
 		var compiler = new Compiler();
 		var atn0 = compiler.compile(this.str);
 		//compiler.debugATN();
@@ -49,7 +55,7 @@ describe('stockton grammar parser', function(){
 		debugATN.debugATN(atn, graphPath);
 	});
 	
-	xit('LexerATNSimulator.match can work', function(){
+	it('LexerATNSimulator.match can work', function(){
 		var compiler = new Compiler();
 		var atn = cycle.retrocycle(compiler.compile(this.str));
 		
@@ -58,9 +64,21 @@ describe('stockton grammar parser', function(){
 			_decisionToDFA.push(new stRuntime.DFA({atnStartState: s, decision: i}));
 		});
 		var _interp = new stRuntime.LexerATNSimulator(atn, _decisionToDFA, null);
-		var input = new LL.Lexer('987');
+		
+		var result = [];
+		var input = new LL.Lexer('987 null');
 		var type = _interp.match(input, 0);
-		console.log('match type = '+ type);
+		result.push(type);
+		
+		while(type !== -1){
+			log.info('input offset '+ input.offset + ' type '+ type);
+			type = _interp.match(input, 0);
+			result.push(type);
+		}
+
+		expect(result).toEqual([
+			2, 1, 5, -1
+		]);
 	});
 	
 	xit('compiler can generate Lexer parser based on ATN', function(){

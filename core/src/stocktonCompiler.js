@@ -47,6 +47,7 @@ function Compiler(targetFileName){
 	this.atn = {
 		startState: null,
 		states: [],
+		ruleToTokenType: {},
 		ruleToStartState: null,
 		ruleToStopState: null,
 		decisionToState:[],
@@ -110,20 +111,23 @@ Compiler.prototype = {
 		var ast = parser.parse().result;
 		var tokenNum = 0;
 		// fetch out all lexer rules: this.lexRuleASTs
+		var rule2TokenType = this.atn.ruleToTokenType;
 		ast.forEach(function(ruleAst){
-			if(ruleAst.type == 'lexRule'){
+			if(ruleAst.type === 'lexRule'){
 				this.lexRuleASTMap[ruleAst.name] = ruleAst;
 				this.lexRuleASTs.push(ruleAst);
 				if(!ruleAst.fragment){
+					rule2TokenType[ruleAst.name] = tokenNum;
 					tokenNum++;
-					this.logger.debug('find lex rule: %s', ruleAst.name);
+					this.logger.debug('compile() find lex rule: %s', ruleAst.name);
 				}
-			}else if(ruleAst.type == 'tokens'){
+			}else if(ruleAst.type === 'tokens'){
 				tokenNum += ruleAst.child.length;
 			}
 		}, this);
 		this.atn.maxTokenType = tokenNum;
-		this.logger.debug('tokenNum: %d', tokenNum);
+		this.logger.debug('compile() tokenNum: %d', tokenNum);
+
 		// CREATE ATN FOR EACH RULE
 		this.createATN();
 		
@@ -137,7 +141,6 @@ Compiler.prototype = {
 		// since I don't want to support MODE at this moment, there is only 1 start state needed
 		this.atn.startState = this.newState('tokensStart');
 		// INIT ACTION, RULE->TOKEN_TYPE MAP
-		this.atn.ruleToTokenType = this.grammar.lexer.types;
 		
 		// CREATE ATN FOR EACH RULE
 		this._createATN(this.lexRuleASTs);

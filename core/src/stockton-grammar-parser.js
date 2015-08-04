@@ -283,8 +283,9 @@ var grammar = {
     },
     
     rule:function(){
+        var fragment = false;
     		if(this.inTokens('protected', 'fragment')){
-    			var fragment = true;
+    			fragment = true;
     			this.advance();
     		}
         var name = this.match('id').text();

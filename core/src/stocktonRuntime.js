@@ -656,6 +656,8 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 	logger: Log4js.getLogger('LexerATNSimulator'),
 	
 	match:function(input, mode){
+		if(mode === undefined)
+			mode = 0;
 		this.mode = mode;
 		this.match_calls++;
 		try{
@@ -729,7 +731,6 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 			}
 			s = target;
 		}
-		debugger;
 		return this.failOrAccept(this.prevAccept, input, s.configs, t);
 	},
 	
@@ -914,7 +915,6 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 			return false;
 		});
 		if ( firstConfigWithRuleStopState ){
-			debugger;
 			proposed.isAcceptState = true;
 			proposed.lexerActionExecutor = firstConfigWithRuleStopState.lexerActionExecutor;
 			proposed.prediction = this.atn.ruleToTokenType[firstConfigWithRuleStopState.state.ruleName];

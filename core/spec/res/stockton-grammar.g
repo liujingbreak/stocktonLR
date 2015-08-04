@@ -21,4 +21,4 @@ options {
 
 Null: 'null' { parseKeyword() }?;
 
-//Anychar: .;
+Anychar: .;
