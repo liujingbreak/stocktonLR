@@ -6,9 +6,9 @@ WS: ' '| '\t';
 
 Number: ('0'..'9')+;
 
-fragment Chr: 'a'..'z'|'A'..'Z'|'_';
-
 Id: Chr ( Chr | '0'..'9' )*;
+
+fragment Chr: 'a'..'z'|'A'..'Z'|'_';
 
 Comment
 options {
