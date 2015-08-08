@@ -1,0 +1,1 @@
+java -jar lib/antlr-4.2.1-dev-complete.jar res/StocktonTry.g4
