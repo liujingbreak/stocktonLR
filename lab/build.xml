@@ -67,7 +67,7 @@
 			excludes="" debug="true" debuglevel="source,lines,vars"
 		 fork="yes" memoryMaximumSize="500m">
 			<classpath>
-				 <path refid="compile_cp"/>
+				<path refid="compile_cp"/>
 			</classpath>
 			<src>
 			    <pathelement path="${gen_src_dir}"/>
@@ -76,13 +76,15 @@
 			<compilerarg line="-Xlint:deprecation"/>
 		</javac>
 	</target>
-	
-	
-	<target name="gwt" depends="" description="compile gwt files">
-	    <ant dir="${basedir}/gwt" antfile="${basedir}/gwt/build.xml">
-	        <property name="classes.dir" value="${dest_dir}"/>
-	        <property name="war.dir" value="${basedir}/web"/>
-	    </ant>
+
+	<target name="run" depends="" description="java run">
+		<java classname="stocktonTry.TryMain" fork="true">
+			<jvmarg line="-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=19816"/>
+			<classpath>
+				<path refid="compile_cp"/>
+				<pathelement path="${dest_dir}" />
+			</classpath>
+		</java>
 	</target>
 
 	<target name="compile_test" depends="compile"  description="compile test files">

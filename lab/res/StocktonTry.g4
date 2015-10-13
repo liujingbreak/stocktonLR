@@ -18,6 +18,4 @@ Comment
 
 Null: 'null' { true }?;
 
-Anychar: .;
-
 root: .+?;

@@ -14,7 +14,7 @@ var stGrammarParser = require('../src/stockton-grammar-parser.js'),
 var log = logger.getLogger('testSpec');
 //log.setLevel('INFO');
 logger.getLogger('ATNConfigSet').setLevel('INFO');
-logger.getLogger('LexerATNSimulator').setLevel('INFO');
+logger.getLogger('Compiler').setLevel('INFO');
 
 describe('Compiler', function(){
 	xit('getStringFromGrammarStringLiteral() should work', function(){
