@@ -384,7 +384,7 @@ ArrayPredictionContext.prototype = _.create(PredictionContext.prototype, {
 			return false;
 		}
 
-		if ( this.hashCode() != o.hashCode() ) {
+		if ( this.hashCode() !== o.hashCode() ) {
 			return false; // can't be same if hash is different
 		}
 
@@ -397,12 +397,29 @@ ArrayPredictionContext.prototype = _.create(PredictionContext.prototype, {
 
 
 	
-function ATNConfig(state, alt, context, semanticContext){
-	if(semanticContext === undefined)
-		this.semanticContext = SemanticContext.NONE;
-	this.state = state;
-	this.alt = alt;
-	this.context = context;
+function ATNConfig(){
+	if(arguments.length === 1 && arguments[0] instanceof ATNConfig) {
+		this._init1.apply(this, arguments);
+	}else if(arguments[0] instanceof ATNConfig){
+		if(arguments.length === 2) {
+			if (arguments[1] instanceof SemanticContext)
+				this._init6.apply(this, arguments);
+			else
+				this._init4.apply(this, arguments);
+		}else if(arguments.length === 3) {
+			if (arguments[2] instanceof SemanticContext) {
+				this._init5.apply(this, arguments);
+			} else if (arguments[2] instanceof PredictionContext) {
+				this._init7.apply(this, arguments);
+			} else
+				throw new Error('invalid ATNConfig constructor');
+
+		}else if(arguments.length === 4){
+			this._init8.apply(this, arguments);
+		}
+	}else{
+		this._init23.apply(this, arguments);
+	}
 	this._key = JSON.stringify({
 			s:this.state.stateNumber,
 			a:this.alt,
@@ -410,9 +427,53 @@ function ATNConfig(state, alt, context, semanticContext){
 			m:this.semanticContext.toString()
 	});
 }
-ATNConfig.prototype.toString = function(){
-	return this._key;
-}
+
+ATNConfig.prototype = {
+	_init1: function(old) {
+		this.state = old.state;
+		this.alt = old.alt;
+		this.context = old.context;
+		this.semanticContext = old.semanticContext;
+		this.reachesIntoOuterContext = old.reachesIntoOuterContext;
+	},
+
+	_init23: function(state, alt, context, semanticContext) {
+		this.state = state;
+		this.alt = alt;
+		this.context = context;
+		if(semanticContext === undefined)
+			semanticContext = SemanticContext.NONE;
+		this.semanticContext = semanticContext;
+	},
+
+	_init4: function(c, state) {
+		this._init8(c, state, c.context, c.semanticContext);
+	},
+
+	_init5: function(c, state, semanticContext) {
+		this._init8(c, state, c.context, semanticContext);
+	},
+
+	_init6: function(c, semanticContext) {
+		this._init8(c, c.state, c.context, semanticContext);
+	},
+
+	_init7: function(c, state, context) {
+		this._init8(c, state, context, c.semanticContext);
+	},
+
+	_init8: function(c, state, context, semanticContext) {
+		this.state = state;
+		this.alt = c.alt;
+		this.context = context;
+		this.semanticContext = semanticContext;
+		this.reachesIntoOuterContext = c.reachesIntoOuterContext;
+	},
+
+	toString: function(){
+		return this._key;
+	}
+};
 
 _DECISION_STATE = {
 	basicBlockStart: true, plusBlockStart:true, starBlockStart:true,
@@ -429,13 +490,20 @@ function isDecisionState(state){
  * @constructor
  */
 function LexerATNConfig(obj){
-	if(obj.config)
-		this.initWithConfig(obj.config);
-	delete obj.config;
-	
-	_.extend(this, obj);
-	this.passedThroughNonGreedyDecision = this.checkNonGreedyDecision(
-		this.checkNonGreedyDecision, this.state);
+	var init;
+	if(arguments[0] instanceof LexerATNConfig){
+		if(arguments.length === 2)
+			init = this._init34;
+		else if(arguments.length === 3){
+			if(arguments[2] instanceof PredictionContext)
+				init = this._init5;
+			else
+				init = this._init34;
+		}
+	}else{
+		init = this._init12;
+	}
+	init.apply(this, arguments);
 	this._key = JSON.stringify({
 			s:this.state.stateNumber,
 			a:this.alt,
@@ -454,20 +522,41 @@ LexerATNConfig.prototype = _.create(ATNConfig.prototype, {
 	 *
 	 * @param config
 	 */
-		initWithConfig: function(config){
-			this.alt = config.alt;
-			this.semanticContext = config.semanticContext;
-			this.reachesIntoOuterContext = config.reachesIntoOuterContext;
-			this.lexerActionExecutor = config.lexerActionExecutor;
-			this.passedThroughNonGreedyDecision = config.passedThroughNonGreedyDecision;
-		},
-		
-		checkNonGreedyDecision:function(source, target){
-			//return checkNonGreedyDecision || isDecisionState(target);
-			return source.passedThroughNonGreedyDecision ||
-				target.type in DECISION_STATES && target.nonGreedy;
+	initWithConfig: function(config){
+		this.alt = config.alt;
+		this.semanticContext = config.semanticContext;
+		this.reachesIntoOuterContext = config.reachesIntoOuterContext;
+		this.lexerActionExecutor = config.lexerActionExecutor;
+		this.passedThroughNonGreedyDecision = config.passedThroughNonGreedyDecision;
 
-		}
+
+	},
+
+	_init12: function(state, alt, context, lexerActionExecutor){
+		ATNConfig.call(this, state, alt, context, SemanticContext.NONE);
+		if(lexerActionExecutor !== undefined)
+			this.lexerActionExecutor = lexerActionExecutor;
+		this.passedThroughNonGreedyDecision = false;
+	},
+
+	_init34: function(c, state, lexerActionExecutor){
+		ATNConfig.call(this, c, state, c.context, c.semanticContext);
+		this.lexerActionExecutor = c.lexerActionExecutor;
+		this.passedThroughNonGreedyDecision = this.checkNonGreedyDecision(c, state);
+	},
+
+	_init5: function(c, state, context){
+		ATNConfig.call(this, c, state, context, c.semanticContext);
+		this.lexerActionExecutor = c.lexerActionExecutor;
+		this.passedThroughNonGreedyDecision = this.checkNonGreedyDecision(c, state);
+	},
+
+	checkNonGreedyDecision:function(source, target){
+		//return checkNonGreedyDecision || isDecisionState(target);
+		return source.passedThroughNonGreedyDecision ||
+			target.type in DECISION_STATES && target.nonGreedy;
+
+	}
 });
 
 var SemanticContext = {};
@@ -792,11 +881,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 		var configs = new OrderedATNConfigSet();
 		for (var i=0, l=p.transitions.length; i< l; i++) {
 			var target = p.transitions[i].target;
-			var c = new LexerATNConfig({
-				state:target, alt: i+1, context:initialContext,
-				semanticContext: SemanticContext.NONE,
-				passedThroughNonGreedyDecision: false
-			});
+			var c = new LexerATNConfig(target, i+1, initialContext);
 			this.closure(input, c, configs, false, false);
 		}
 		return configs;
@@ -873,12 +958,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 						lexerActionExecutor = lexerActionExecutor.fixOffsetBeforeMatch(input.offset - this.startIndex);
 					}
 					if (this.closure(input,
-							new LexerATNConfig({state: target,
-									alt: c.alt,
-									context: c.context,
-									semanticContext: c.semanticContext,
-									reachesIntoOuterContext: c.reachesIntoOuterContext,
-									lexerActionExecutor: lexerActionExecutor}),
+							new LexerATNConfig(c, target, lexerActionExecutor),
 							reach, currentAltReachedAcceptState, true)) {
 						// any remaining configs for this alt have a lower priority than
 						// the one that just reached an accept state.
@@ -948,26 +1028,19 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 					return true;
 				}
 				else {
-					configs.add(new LexerATNConfig({
-						config: config,
-						state: config.state,
-						context:PredictionContext.EMPTY
-					}));
+					configs.add(new LexerATNConfig(config, config.state, PredictionContext.EMPTY));
 					currentAltReachedAcceptState = true;
 				}
 			}
+
 			if ( config.context!=null && !config.context.isEmpty() ) {
 				for (var i = 0, l= config.context.size(); i < l; i++) {
+
 					if (config.context.getReturnState(i) != PredictionContext.EMPTY_RETURN_STATE) {
+
 						var newContext = config.context.getParent(i); // "pop" return state
-						var returnState = this.atn.states.get(config.context.getReturnState(i));
-						var c = new LexerATNConfig({
-								state: returnState,
-								alt: config.alt,
-								context:newContext,
-								semanticContext: SemanticContext.NONE,
-								passedThroughNonGreedyDecision: false
-						});
+						var returnState = this.atn.states[config.context.getReturnState(i)];
+						var c = new LexerATNConfig(returnState, config.alt, newContext);
 						currentAltReachedAcceptState = this.closure(input, c, configs, currentAltReachedAcceptState, speculative);
 					}
 				}
@@ -1004,7 +1077,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 			case 'rule':
 				var newContext =
 						SingletonPredictionContext.create(config.context, t.followState.stateNumber);
-					c = new LexerATNConfig({config: config, state:t.target, context: newContext});
+					c = new LexerATNConfig(config, t.target, newContext);
 					break;
 			case 'precedence':
 				throw new Error("Precedence predicates are not supported in lexers.");
@@ -1033,7 +1106,7 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 				}
 				configs.hasSemanticContext = true;
 				if (this.evaluatePredicate(input, pt.ruleIndex, pt.predContent, speculative)) {
-					c = new LexerATNConfig({config: config, state:t.target});
+					c = new LexerATNConfig(config, t.target);
 				}
 				break;
 			case 'action':
@@ -1041,15 +1114,15 @@ LexerATNSimulator.prototype = _.create(ATNSimulator.prototype, {
 					// execute actions anywhere in the start rule for a token.
 					//todo
 					var lexerActionExecutor = LexerActionExecutor.append(config.lexerActionExecutor, t.actionContent);
-					c = new LexerATNConfig({config: config, state: t.target, lexerActionExecutor:lexerActionExecutor});
+					c = new LexerATNConfig(config, t.target, lexerActionExecutor);
 					break;
 				}else {
 					// ignore actions in referenced rules
-					c = new LexerATNConfig({config: config, state: t.target});
+					c = new LexerATNConfig(config, t.target);
 					break;
 				}
 			case 'epsilon':
-				c = new LexerATNConfig({config: config, state:t.target});
+				c = new LexerATNConfig(config, t.target);
 				break;
 		}
 

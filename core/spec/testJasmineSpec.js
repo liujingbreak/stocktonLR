@@ -66,7 +66,7 @@ describe('stockton grammar parser', function(){
 		var _interp = new stRuntime.LexerATNSimulator(atn, _decisionToDFA, null);
 		
 		var result = [];
-		var input = new LL.Lexer('987 abc null');
+		var input = new LL.Lexer('321 aaaa 123');
 		var type = _interp.match(input, 0);
 		result.push(type);
 		
@@ -77,7 +77,7 @@ describe('stockton grammar parser', function(){
 		}
 
 		expect(result).toEqual([
-			2, 1, 4, 1, 5, -1
+			2, 1, 3, 1, 2, -1
 		]);
 	});
 	
