@@ -7,7 +7,7 @@ public class TryMain{
 
     public static void main(String[] args)throws Exception{
 
-        ANTLRInputStream in = new ANTLRInputStream("a");
+        ANTLRInputStream in = new ANTLRInputStream("nullabc");
         StocktonTryLexer lexer = new StocktonTryLexer(in);
         System.out.println("start");
         Token tk = lexer.nextToken();

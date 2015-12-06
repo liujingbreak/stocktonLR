@@ -1,6 +1,6 @@
 var stGrammarParser = require('../src/stockton-grammar-parser.js'),
 	LL = require('../src/baseLLParser.js'),
-	sc = require('../src/stocktonCompiler'),
+	sc = require('../src/stockton-compiler'),
 	debugATN = require('../src/debugATN.js'),
 	Compiler = sc.Compiler,
 	stRuntime = require('../src/stocktonRuntime.js'),
@@ -45,7 +45,6 @@ describe('stockton grammar parser', function(){
 	xit('compiler process AST -> ATN', function(){
 		var compiler = new Compiler();
 		var atn0 = compiler.compile(this.str);
-		//compiler.debugATN();
 		expect(atn0).toBeDefined();
 		console.log('-------------- ATN ------------');
 		console.log('atn: %j', atn0);
@@ -55,7 +54,7 @@ describe('stockton grammar parser', function(){
 		debugATN.debugATN(atn, graphPath);
 	});
 	
-	it('LexerATNSimulator.match can work', function(){
+	xit('LexerATNSimulator.match can work', function(){
 		var compiler = new Compiler();
 		var atn = cycle.retrocycle(compiler.compile(this.str));
 		
@@ -80,7 +79,34 @@ describe('stockton grammar parser', function(){
 			2, 1, 3, 1, 2, -1
 		]);
 	});
-	
+
+	it('LexerATNSimulator.match can work well with issue of "Keyword" vs "Id" ', function(){
+		var compiler = new Compiler();
+		var g = fs.readFileSync(path.join( __dirname, 'res/test-grammar-2.g'), {encoding: 'utf-8'});
+		var atn = cycle.retrocycle(compiler.compile(g));
+
+		var _decisionToDFA = [], i = 0;
+		atn.decisionToState.forEach(function(s){
+			_decisionToDFA.push(new stRuntime.DFA({atnStartState: s, decision: i}));
+		});
+		var _interp = new stRuntime.LexerATNSimulator(atn, _decisionToDFA, null);
+
+		var result = [];
+		var input = new LL.Lexer('null');
+		var type = _interp.match(input, 0);
+		result.push(type);
+
+		while(type !== -1){
+			log.info('input offset '+ input.offset + ' type '+ type);
+			type = _interp.match(input, 0);
+			result.push(type);
+		}
+
+		expect(result).toEqual([
+			2, 1, 3, 1, 2, -1
+		]);
+	});
+
 	xit('compiler can generate Lexer parser based on ATN', function(){
 		var compiler = new Compiler();
 		var atn = cycle.retrocycle(compiler.compile(this.str));

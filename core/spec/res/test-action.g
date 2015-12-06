@@ -1,7 +1,9 @@
-grammar StocktonTry;
-@header { package stocktonTry; }
+Null
+@init {
 
-Null: 'null' { true }?;
+}
+	: 'null' { System.out.println("this is null rule") }?;
+
 L: '\n' | '\r';
 
 WS: ' '| '\t';
@@ -13,11 +15,14 @@ Id: Chr ( Chr | '0'..'9' )*;
 fragment Chr: 'a'..'z'|'A'..'Z'|'_';
 
 Comment
-    :   '//' (
+options {
+    paraphrase="a single line comment";
+}
+    :   "//" (
             ~('\n'|'\r'|'\uffff')
         )*
     ;
 
 
 
-root: .+?;
+Anychar: .;

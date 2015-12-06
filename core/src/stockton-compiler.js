@@ -15,7 +15,7 @@ var grmParser = require('./stockton-grammar-parser.js'),
 var Transition = srt.Transition;
 
 var 	Log4js = require('log4js'),
-	logger = Log4js.getLogger('stocktonCompiler');
+	logger = Log4js.getLogger('stockton-compiler');
 
 /** @class AST */
 AST = {

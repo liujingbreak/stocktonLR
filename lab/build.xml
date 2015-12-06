@@ -79,7 +79,7 @@
 
 	<target name="run" depends="" description="java run">
 		<java classname="stocktonTry.TryMain" fork="true">
-			<jvmarg line="-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=19816"/>
+			<!--<jvmarg line="-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=19816"/>-->
 			<classpath>
 				<path refid="compile_cp"/>
 				<pathelement path="${dest_dir}" />
