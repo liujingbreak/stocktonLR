@@ -28,7 +28,7 @@ describe('Compiler', function(){
 describe('stockton grammar parser', function(){
 		
 	beforeEach(function(){
-			this.str = fs.readFileSync(path.join( __dirname, 'res/stockton-grammar.g'), {encoding: 'utf-8'});
+			this.str = fs.readFileSync(path.join( __dirname, 'res/stockton-grammar.g4'), {encoding: 'utf-8'});
 	});
 	
 	xit('can generate AST', function(){
@@ -82,7 +82,7 @@ describe('stockton grammar parser', function(){
 
 	it('LexerATNSimulator.match can work well with issue of "Keyword" vs "Id" ', function(){
 		var compiler = new Compiler();
-		var g = fs.readFileSync(path.join( __dirname, 'res/test-grammar-2.g'), {encoding: 'utf-8'});
+		var g = fs.readFileSync(path.join( __dirname, 'res/test-grammar-2.g4'), {encoding: 'utf-8'});
 		var atn = cycle.retrocycle(compiler.compile(g));
 
 		var _decisionToDFA = [], i = 0;
