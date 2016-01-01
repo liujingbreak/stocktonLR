@@ -13,19 +13,23 @@ var gulp = require('gulp'),
     del = require('del');
 
 var SRC = 'src/**/*.js';
+var jshintSrc = SRC;
 
 gulp.task('default', function() {
-    console.log('gulp task [default] ...')
+    console.log('+ gulp task [default] ...')
 });
 
 gulp.task('jshint', function() {
-
+    console.log('jshint on '+ jshintSrc);
+    gulp.src(jshintSrc).pipe(jshint())
+        .pipe(jshint.reporter('jshint-stylish'));
 });
 
 gulp.task('watch', function () {
-    var watcher = gulp.watch(SRC, []);
+    var watcher = gulp.watch(SRC, ['jshint']);
     watcher.on('change', function (event) {
         console.log('File ' + event.path + ' was ' + event.type + ', running tasks...');
+        jshintSrc = event.path;
     });
 });
 gulp.task('clear', function (done) {

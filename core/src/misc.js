@@ -33,10 +33,10 @@ exports.Graph = (function(){
 	Node.prototype={
 		toString:function() { return this.payload.toString(); },
 		addEdge:function(n) {
-            if ( this.edges==null ){
+            if ( this.edges == null ){
             	this.edges = [];
             }
-            if ( edges.indexOf(n) == -1 ) edges.push(n);
+            if ( this.edges.indexOf(n) == -1 ) this.edges.push(n);
         }
 	};
 	Graph.prototype ={
@@ -61,7 +61,7 @@ exports.Graph = (function(){
 			while ( visited.size() < this.nodes.length ) {
 				// pick any unvisited node, n
 				var n = null;
-				for( id in this.nodes){
+				for(var id in this.nodes) {
 					if(!this.nodes.hasOwnProperty(id))
 						continue;
 				//for (Iterator it = nodes.values().iterator(); it.hasNext();) {
@@ -102,7 +102,7 @@ exports.MultiMap = (function(){
 		},
 		getPairs:function(){
 			var pairs =[];
-			for(key in this.obj){
+			for(var key in this.obj){
 				if(this.obj.hasOwnProperty(key))
 					pairs.push({a:key, b:this.obj[key]});
 			}
@@ -110,7 +110,7 @@ exports.MultiMap = (function(){
 		},
 		values:function(){
 			var v = [];
-			for(k in this.obj)
+			for(var k in this.obj)
 				if(this.obj.hasOwnProperty(key))
 					v.push(this.obj[k]);
 			return v;
@@ -129,6 +129,7 @@ exports.MultiMap = (function(){
 	function Interval(a, b){
 		this.a=a; this.b=b;
 	}
+	
 	Interval.of = function(a, b) {
 		// cache just a..a
 		if ( a!=b || a<0 || a>INTERVAL_POOL_MAX_VALUE ) {
@@ -138,7 +139,8 @@ exports.MultiMap = (function(){
 			cache[a] = new Interval(a,a);
 		}
 		return cache[a];
-	}
+	};
+	
 	Interval.prototype={
 		length:function() {
 			if ( b<a ) return 0;
@@ -186,14 +188,14 @@ exports.MultiMap = (function(){
 			return Interval.of(Math.max(a, other.a), Math.min(b, other.b));
 		},
 		toString:function() {
-			return this.a +".."+ this.b;
+			return this.a +'..'+ this.b;
 		}
 	};
 	var INVALID = new Interval(-1,-2);
 	
 	function IntervalSet(intervals){
 		this.readonly = false;
-		if(arguments.length == 0){
+		if(arguments.length === 0){
 			this.intervals = [];
 		}else if(arguments.length == 1 && util.isArray(intervals)){
 			this.intervals = intervals;
@@ -389,30 +391,36 @@ exports.MultiMap = (function(){
 	
 			var compl = new IntervalSet();
 			var n = this.intervals.length;
-			if ( n ==0 ) {
+			if ( n === 0 ) {
 				return compl;
 			}
 			var first = this.intervals[0];
 			// add a range from 0 to first.a constrained to vocab
 			if ( first.a > 0 ) {
-				var s = IntervalSet.of(0, first.a-1);
-				var a = s.and(vocabularyIS);
-				compl.addAll(a);
+				(function() {
+					var s = IntervalSet.of(0, first.a-1);
+					var a = s.and(vocabularyIS);
+					compl.addAll(a);
+				})();
 			}
-			for (var i=1; i<n; i++) { // from 2nd interval .. nth
-				var previous = this.intervals[i-1];
-				var current = this.intervals[i];
-				var s = IntervalSet.of(previous.b+1, current.a-1);
-				var a = s.and(vocabularyIS);
-				compl.addAll(a);
-			}
+			(function() {
+				for (var i=1; i<n; i++) { // from 2nd interval .. nth
+					var previous = this.intervals[i-1];
+					var current = this.intervals[i];
+					var s = IntervalSet.of(previous.b+1, current.a-1);
+					var a = s.and(vocabularyIS);
+					compl.addAll(a);
+				}
+			})();
 			var last = this.intervals[n -1];
 			// add a range from last.b to maxElement constrained to vocab
-			if ( last.b < maxElement ) {
-				var s = IntervalSet.of(last.b+1, maxElement);
-				var a = s.and(vocabularyIS);
-				compl.addAll(a);
-			}
+			(function() {
+				if ( last.b < maxElement ) {
+					var s = IntervalSet.of(last.b+1, maxElement);
+					var a = s.and(vocabularyIS);
+					compl.addAll(a);
+				}
+			})();
 			return compl;
 		},
 		
@@ -502,23 +510,25 @@ exports.MultiMap = (function(){
 		}
 	}
 	BitSet.of = function(el, el2, el3, el4) {
+		var s;
 		switch(arguments.length){
 		case 1:
-			var s = new BitSet(el + 1);
+			s = new BitSet(el + 1);
 			s.add(el);
 			return s;
 		case 2:
-			var s = new BitSet(Math.max(el, el2)+1);
+			s = new BitSet(Math.max(el, el2)+1);
 			s.add(el);
 			s.add(el2);
 			return s;
 		default:
-			var s = new BitSet();
+			s = new BitSet();
 			for(var i=0,l=arguments.length; i<l;i++)
 				s.add(arguments[i]);
 			return s;
 		}
-	}
+	};
+	
 	BitSet.prototype={
 		or:function(a) {
 			throw new Error('not supported');
@@ -529,7 +539,7 @@ exports.MultiMap = (function(){
 				var word = this.bits[i];
 				if (word !== 0) {
 					for (var bit = BITS - 1; bit >= 0; bit--) {
-						if ((word & (1 << bit)) != 0) {
+						if ((word & (1 << bit)) !== 0) {
 							deg++;
 						}
 					}
@@ -562,7 +572,7 @@ exports.MultiMap = (function(){
 			}
 			var n = el >> LOG_BITS;
 			if (n >= this.bits.length) return false;
-			return (this.bits[n] & this.bitMask(el)) != 0;
+			return (this.bits[n] & this.bitMask(el)) !== 0;
 		}
 	};
 	exports.BitSet = BitSet;
@@ -576,7 +586,8 @@ MurmurHash.initialize = function(seed){
 		return initialize(MurmurHash.DEFAULT_SEED);
 	}
 	return seed;
-}
+};
+
 MurmurHash.update = function( hash, value) {
 	if(typeof(value) == 'object')
 		value = value != null ? value.hashCode() : 0;
@@ -754,10 +765,11 @@ Integer.bitCount = function(i) {
         i = i + (i >>> 8);
         i = i + (i >>> 16);
         return i & 0x3f;
-}
+};
+
 HashMap.prototype = {
 	put:function(key, value){
-		if (this.table.length == 0) {
+		if (this.table.length === 0) {
             this.inflateTable(this.threshold);
         }
 		if (key == null)
@@ -816,8 +828,8 @@ HashMap.prototype = {
     _roundUpToPowerOf2:function( number) {
         // assert number >= 0 : "number must be non-negative";
         var rounded = number >= MAXIMUM_CAPACITY ? MAXIMUM_CAPACITY
-                : (rounded = Integer.highestOneBit(number)) != 0
-                    ? (Integer.bitCount(number) > 1) ? rounded << 1 : rounded
+                : (rounded = Integer.highestOneBit(number)) !== 0 ? 
+                (Integer.bitCount(number) > 1) ? rounded << 1 : rounded
                     : 1;
         
         return rounded;

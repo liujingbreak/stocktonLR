@@ -1,5 +1,4 @@
 
-var assert = require('assert');
 var EOF = -1;
 
 function mixin(target, obj){
@@ -20,18 +19,12 @@ if (typeof Object.create !== 'function') {
         };
     })();
 }
-function extend(subclass, superclass, override){
-	subclass.prototype = Object.create(superclass.prototype);
-	subclass._super = superclass.prototype;
-	subclass.superclass = superclass;
-	mixin(subclass.prototype, override);
-}
+
 function UnexpectLex(msg){
     var err = new Error(msg);
     err.name = 'UnexpectLex';
     return err;
 }
-//extend(UnexpectLex, Error);
 
 function UnexpectToken(msg){
     var err = Error(msg);
@@ -39,9 +32,6 @@ function UnexpectToken(msg){
     err.name = 'UnexpectToken';
     return err;
 }
-//extend(UnexpectToken, Error);
-
-//assert(new UnexpectToken('').constructor === UnexpectToken);
 
 function Lexer(str, callback){
     this.offset = 0;
@@ -119,11 +109,12 @@ Lexer.prototype = {
     },
     
     bnfLoop:function(leastTimes, predFunc, subRule){
+    	var pred;
         if(subRule === undefined)
             subRule = this.advance;
         while(this.la() != EOF){
             try{
-                var pred = predFunc.call(this, this);
+                pred = predFunc.call(this, this);
                 if(pred === undefined){
                     throw new Error('predicate function must return boolean value');
                 }
@@ -171,7 +162,7 @@ Lexer.prototype = {
             this.advance();
     },
     unexpect:function(msg){
-        chr = this.la();
+        var chr = this.la();
         if(chr == EOF)
             chr = 'EOF';
         console.log('unexpect '+ (msg?msg:'') +' char at line '+ this.lineno + ', offset '+ this.offset + 
@@ -230,7 +221,7 @@ Lexer.prototype = {
     */
     emitToken:function(stype, channel){
         if(this.escapedOffset != null){
-            var tk = this._emitToken('<UNK>', 0, this.escapedOffset, this.escapedLine, this.escapedCol,
+            this._emitToken('<UNK>', 0, this.escapedOffset, this.escapedLine, this.escapedCol,
                 this.startOff, this.startLine, this.startCol);
             this.escapedOffset = null;
             this.escapedLine = null;
@@ -414,7 +405,6 @@ Parser.prototype = {
                 this.lexer.moreToken();
             if(next.next == null){
                 console.log('token does not have next '+ next);
-                debugger;
                 this.lexer.moreToken();
             }
             next = next.next;
@@ -429,7 +419,7 @@ Parser.prototype = {
             index = 1;
         var prev = this._next;
         for(var i = index; i; i--){
-            var prev = prev.prev;
+            prev = prev.prev;
             if(!prev)
                 return this.SOF;
             if(prev.channel !== this.channel)
@@ -513,7 +503,6 @@ Parser.prototype = {
                 return false;
             }
             if(next.type == EOF){
-                debugger;
                 return i == l-1;
             }
             if(!next.next)
@@ -627,7 +616,6 @@ Parser.prototype = {
         var ret;
         try{
             var args = [];
-            var parser = this;
             for(var i=1,l=arguments.length; i<l; i++){
                 args.push(arguments[i]);
             }
@@ -694,11 +682,11 @@ Parser.prototype = {
             var p = this.ruleStackCurr.parent;
             if(!p) return;
             
-            var pc = p.child, tc = this.ruleStackCurr.child;
+            var pc = p.child, tc = this.ruleStackCurr.child, i, l;
             if(ret != null){
                 ret = this.onAST(this.ruleStackCurr, ret);
                 if(Array.isArray(ret)){
-                    for(var i=0,l=ret.length; i<l;i++)
+                    for(i=0,l=ret.length; i<l;i++)
                         pc.push(ret[i]);
                 }else
                     pc.push(ret);
@@ -707,7 +695,7 @@ Parser.prototype = {
                     var ast = {type:name, child: tc};
                     pc.push(this.onAST(this.ruleStackCurr, ast));
                 }else{
-                    for(var i=0,l=tc.length; i<l; i++)
+                    for(i=0,l=tc.length; i<l; i++)
                     pc.push(tc[i]);
                 }
             }
@@ -724,7 +712,7 @@ Parser.prototype = {
             debugMsg += ' |';
         debugMsg += '- '+ arg;
         var args = [debugMsg];
-        for(var i=1,l=arguments.length;i<l;i++)
+        for(i=1,l=arguments.length;i<l;i++)
             args.push(arguments[i]);
         console.log.apply(console, args);
         //console.log(debugMsg);

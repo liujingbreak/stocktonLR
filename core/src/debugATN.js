@@ -34,7 +34,7 @@ function debugATN(atn, file){
 	while(true){
 		var notDrawedSArr= _.sortBy(_.values(notDrawedStates), 'stateNumber');
 		row++;
-		if(notDrawedSArr.length == 0)
+		if(notDrawedSArr.length === 0)
 			break;
 		drawState(notDrawedSArr[0], 0);
 	}
@@ -92,12 +92,14 @@ function drawState(state, col){
 function line(col0, row0, col1, row1, transition){
 	var r = 30, x0 = col0 * 80 + r, y0 = row0 * 80 + r,
 		x1 = col1 * 80 + r, y1 = row1 * 80 + r;
+		
+	var cx0, cx1, s;
 
 	var text;
 	if(row0 == row1){
 		if(col0 +1 === col1){
 			//short staight line
-			var s = 'M ' + (x0 + r) + ' '+ y0 +' H '+ (x1 - r);
+			s = 'M ' + (x0 + r) + ' '+ y0 +' H '+ (x1 - r);
 			//var s = 'M ' + (x0 + r) + ' '+ y0 +' Q'+ ((x0 + x1)>>1)+' '+ (y1 - 10) +','+ (x1 - r) +' '+ y1;
 			if(transition)
 				drawTransition((x0 + x1)>>1, y0 - 10, transition);
@@ -105,13 +107,13 @@ function line(col0, row0, col1, row1, transition){
 		}else{
 		//we need a beautiful curve here
 			if(x0 > x1){
-				var cx0 = x0 -r;
-				var cx1 = x1 +r;
+				cx0 = x0 -r;
+				cx1 = x1 +r;
 			}else{
-				var cx0 = x0 +r;
-				var cx1 = x1 -r;
+				cx0 = x0 +r;
+				cx1 = x1 -r;
 			}
-			var s = 'M ' + x0 + ' '+ (y0 + r) + ' C '+ cx0  +' '+ (y0 + 60) + ','+ cx1 +' '+ (y1 + 60) + ', ' + x1 +' '+ (y1 + r);
+			s = 'M ' + x0 + ' '+ (y0 + r) + ' C '+ cx0  +' '+ (y0 + 60) + ','+ cx1 +' '+ (y1 + 60) + ', ' + x1 +' '+ (y1 + r);
 			//var s = 'M ' + x0 + ' '+ (y0 + r) +' Q' + ((x0 + x1) >>1)+' '+ (y1+ 60) + ','+  x1 +' '+ (y1 + r);
 			if(transition)
 				drawTransition((x0 + x1)>>1, y0 + r + 20, transition);
@@ -121,19 +123,19 @@ function line(col0, row0, col1, row1, transition){
 		if(row1 > row0){
 			if(col1 > col0){
 				//var s = 'M ' + x0 + ' '+ (y0+r) + ' V '+ y1+ ' H '+ (x1 -r) ;
-				var s = 'M ' + x0 + ' '+ (y0+r) + ' C '+ x0 + ' '+ (y1+5)+ ', '+ (x0-5) +' '+ y1+ ', '+ (x1 -r) +' '+ y1;
+				s = 'M ' + x0 + ' '+ (y0+r) + ' C '+ x0 + ' '+ (y1+5)+ ', '+ (x0-5) +' '+ y1+ ', '+ (x1 -r) +' '+ y1;
 				if(transition)
 					drawTransition( (x0 + x1)>>1, y1-5, transition);
 					//text = '<text class="tran" x="'+ ((x0 + x1)>>1) +'"  y="'+ (y1 - 5) +'">' + textTransition(transition) +'</text>';
 			}
 		}else{
 			if(col0 > col1){
-				var s = 'M ' + x0 + ' '+ (y0 - r) + ' L '+ x1 + ' '+ (y1 + r);
+				s = 'M ' + x0 + ' '+ (y0 - r) + ' L '+ x1 + ' '+ (y1 + r);
 				if(transition)
 					drawTransition( (x0 + x1)>>1, (y0 + y1)>>1, transition);
 					//text = '<text class="tran" x="'+ ((x0 + x1)>>1) +'"  y="'+ ((y0 + y1)>>1) +'">' + textTransition(transition) +'</text>';
 			}else{
-				var s = 'M ' + (x0 + r) + ' '+ y0 +' C '+ (x1 +5)+' '+ y0 +','+ x1 +' '+(y0 +5)+ ','+ x1 +' '+ (y1 + r);
+				s = 'M ' + (x0 + r) + ' '+ y0 +' C '+ (x1 +5)+' '+ y0 +','+ x1 +' '+(y0 +5)+ ','+ x1 +' '+ (y1 + r);
 				if(transition)
 					drawTransition( (x0 + x1)>>1, y0 - 5, transition);
 					//text = '<text class="tran" x="'+ ((x0 + x1)>>1) +'"  y="'+ (y0 - 5) +'">' + textTransition(transition) +'</text>';
